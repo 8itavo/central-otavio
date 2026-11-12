@@ -45,8 +45,8 @@ const MENU = [
 const MENU_CELULAR = [['geral', 'Geral'], ['agencia', 'Agência'], ['clientes', 'Clientes'], ['pessoal', 'Pessoal'], ['tarefas', 'Tarefas']];
 
 /* ---------- Estado ---------- */
-const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [] };
-const ui = { tela: 'geral', filtroLanc: 'todos', diaPrioridade: 'hoje', frente: 'todas', escopo: 'empresa', mes: null, statusCliente: 'abertos', deslocamentoSemana: 0 };
+const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [], documentos: [] };
+const ui = { tela: 'geral', filtroLanc: 'todos', diaPrioridade: 'hoje', frente: 'todas', escopo: 'empresa', mes: null, statusCliente: 'abertos', deslocamentoSemana: 0, clienteId: null, tipoDoc: 'contrato' };
 const manipuladores = {};
 
 /* ---------- Utilidades ---------- */
@@ -125,6 +125,7 @@ const FORMULARIOS = {
     { n: 'ultimo_contato', r: 'Último contato', tipo: 'date' },
     { n: 'proxima_acao', r: 'Próxima ação' }, { n: 'proxima_acao_em', r: 'Data da próxima ação', tipo: 'date' },
     { n: 'servicos', r: 'Serviços contratados', largo: true },
+    { n: 'pagador', r: 'Nome que aparece no Pix (para achar os pagamentos)', largo: true },
     { n: 'notas', r: 'Notas', area: true, largo: true }
   ] },
   leads: { nome: 'lead', campos: () => [
@@ -530,7 +531,7 @@ const TELA = {
         <section class="cartao"><h2>Clientes ativos <small><button class="btn pequeno" data-acao="ir" data-valor="clientes">Ver todos</button></small></h2>
           ${lista(abertos, c => {
             const dias = c.ultimo_contato ? diasEntre(c.ultimo_contato, d) : null;
-            return `<li class="linha clicavel" data-acao="editar" data-tabela="clientes" data-id="${c.id}">${avatar(c.nome, c.nome)}<div class="corpo"><b>${esc(c.nome)}</b>
+            return `<li class="linha clicavel" data-acao="abrir-cliente" data-id="${c.id}">${avatar(c.nome, c.nome)}<div class="corpo"><b>${esc(c.nome)}</b>
               <small class="${dias === null || dias > DIAS_SEM_CONTATO ? 'alerta' : ''}">${dias === null ? 'Contato não registrado' : `Último contato há ${dias} dias`}</small></div>
               <span class="valor">${moeda(c.valor_mensal)}</span></li>`;
           }, 'Nenhum cliente ativo.')}</section>
@@ -690,7 +691,7 @@ const TELA = {
         const dias = c.ultimo_contato ? diasEntre(c.ultimo_contato, hoje()) : null;
         const tarefas = dados.tarefas.filter(t => t.cliente_id === c.id && t.status !== 'feita').length;
         const cor = c.status === 'em_risco' ? 'vermelho' : c.status === 'ativo' ? 'azul' : '';
-        return `<li class="linha cliente"><div class="corpo clicavel" data-acao="editar" data-tabela="clientes" data-id="${c.id}" role="button" tabindex="0">
+        return `<li class="linha cliente"><div class="corpo clicavel" data-acao="abrir-cliente" data-id="${c.id}" role="button" tabindex="0">
             <b>${esc(c.nome)}</b>
             <small><span class="selo ${cor}">${esc(STATUS_CLIENTE[c.status])}</span> ${dias === null ? 'Último contato não registrado' : `<span class="${dias > DIAS_SEM_CONTATO ? 'alerta' : ''}">Contato há ${dias} dia(s)</span>`}${tarefas ? ` · ${tarefas} entrega(s) em aberto` : ''}</small>
             ${c.proxima_acao ? `<small>Próxima ação: ${esc(c.proxima_acao)}${c.proxima_acao_em ? ' em ' + fmtData(c.proxima_acao_em) : ''}</small>` : ''}
@@ -698,6 +699,55 @@ const TELA = {
           <span class="valor">${moeda(c.valor_mensal)}</span>
           <button class="btn pequeno" data-acao="contato-hoje" data-id="${c.id}">Falei hoje</button></li>`;
       }, 'Nenhum cliente aqui. Cadastre o primeiro ou peça no chat para importar.')}</section>`;
+  },
+
+  cliente() {
+    const c = dados.clientes.find(x => x.id === ui.clienteId);
+    if (!c) { ui.tela = 'clientes'; return TELA.clientes(); }
+    let re = null; try { re = c.pagador ? new RegExp(c.pagador, 'i') : null; } catch (e) {}
+    const pagos = re ? dados.lancamentos.filter(l => l.tipo === 'entrada' && re.test(l.descricao || '')).sort((a, b) => b.vencimento.localeCompare(a.vencimento)) : [];
+    const totalAno = somaV(pagos.filter(l => l.vencimento.slice(0, 4) === hoje().slice(0, 4)));
+    const docs = dados.documentos.filter(d => d.cliente_id === c.id).sort((a, b) => (b.data || b.criado_em).localeCompare(a.data || a.criado_em));
+    const tarefas = dados.tarefas.filter(t => t.cliente_id === c.id && t.status !== 'feita');
+    const cor = c.status === 'em_risco' ? 'vermelho' : c.status === 'ativo' ? 'azul' : '';
+    const TIPOS_DOC = { contrato: 'Contrato', comprovante: 'Comprovante', outro: 'Outro' };
+    const linhaDoc = d => `<li class="linha">${avatar(TIPOS_DOC[d.tipo], d.tipo)}<div class="corpo clicavel" data-acao="abrir-doc" data-id="${d.id}" role="button" tabindex="0"><b>${esc(d.nome)}</b>
+      <small>${esc(TIPOS_DOC[d.tipo])} · ${fmtData(d.data || d.criado_em.slice(0, 10))}</small></div>
+      <button class="btn pequeno" data-acao="abrir-doc" data-id="${d.id}">Abrir</button>
+      <button class="btn pequeno perigo" data-acao="apagar-doc" data-id="${d.id}">Apagar</button></li>`;
+    const info = [['Contato', c.contato], ['Telefone', c.telefone], ['Serviços', c.servicos], ['Vencimento', c.dia_vencimento ? 'Todo dia ' + c.dia_vencimento : ''],
+      ['Próxima ação', c.proxima_acao ? c.proxima_acao + (c.proxima_acao_em ? ' em ' + fmtData(c.proxima_acao_em) : '') : '']].filter(x => x[1]);
+    return topo(c.nome, STATUS_CLIENTE[c.status] + ' · ' + moeda(c.valor_mensal) + ' por mês',
+      `<button class="btn" data-acao="ir" data-valor="clientes">Voltar</button><button class="btn azul" data-acao="editar" data-tabela="clientes" data-id="${c.id}">Editar</button>`) + `
+      <div class="grade kpis">
+        ${kpi('Valor mensal', moeda(c.valor_mensal), STATUS_CLIENTE[c.status], 'destaque', 'carteira')}
+        ${kpi('Recebido em ' + hoje().slice(0, 4), moeda(totalAno), pagos.length ? `${pagos.length} pagamento(s) encontrados` : 'Nenhum pagamento ligado', '', 'subir')}
+        ${kpi('Último pagamento', pagos[0] ? moeda(pagos[0].valor) : '—', pagos[0] ? fmtData(pagos[0].vencimento) : 'Sem registro', '', 'feito')}
+        ${kpi('Documentos', String(docs.length), `${docs.filter(d => d.tipo === 'contrato').length} contrato(s)`, '', 'lancamentos')}
+      </div>
+      <div class="grade duas bloco-espaco">
+        <section class="cartao"><h2>Dados do cliente</h2>
+          <dl class="ficha">${info.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+          ${c.notas ? `<p class="notas-cliente">${esc(c.notas)}</p>` : ''}
+          <p><span class="selo ${cor}">${esc(STATUS_CLIENTE[c.status])}</span></p>
+        </section>
+        <section class="cartao"><h2>Entregas em aberto</h2>${lista(tarefas, t => linhaTarefa(t), 'Nada em aberto para este cliente.')}
+          <p>${botaoNovo('tarefas', 'Nova entrega', JSON.stringify({ cliente_id: c.id, frente: 'agencia' }))}</p></section>
+      </div>
+      <div class="bloco-espaco">
+        <section class="cartao"><h2>Documentos</h2>
+          <form class="enviar-doc" data-form="documento">
+            <select name="tipo" aria-label="Tipo de documento">${Object.entries(TIPOS_DOC).map(([v, r]) => `<option value="${v}" ${ui.tipoDoc === v ? 'selected' : ''}>${r}</option>`).join('')}</select>
+            <input type="file" name="arquivo" accept="application/pdf,image/*" required>
+            <button class="btn azul pequeno">Anexar</button>
+          </form>
+          ${lista(docs, linhaDoc, 'Nenhum documento ainda. Anexe o contrato e os comprovantes.')}
+        </section>
+      </div>
+      <div class="bloco-espaco">
+        <section class="cartao"><h2>Pagamentos recebidos <small>${c.pagador ? 'pelo nome no Pix' : 'informe o nome do Pix em Editar'}</small></h2>
+          ${lista(pagos.slice(0, 12), linhaTransacao, 'Nenhum pagamento encontrado no banco.')}</section>
+      </div>`;
   },
 
   prospeccao() {
@@ -771,6 +821,21 @@ Object.assign(manipuladores, {
   semana: b => { ui.deslocamentoSemana = Number(b.dataset.valor) === 0 ? 0 : ui.deslocamentoSemana + Number(b.dataset.valor); desenhar(); },
   meta: b => gravar('metas_semana', { concluida: b.checked }, b.dataset.id),
   'apagar-meta': b => apagar('metas_semana', b.dataset.id),
+  'abrir-cliente': b => { ui.clienteId = b.dataset.id; ui.tela = 'cliente'; desenhar(); window.scrollTo(0, 0); },
+  'abrir-doc': async b => {
+    const d = dados.documentos.find(x => x.id === b.dataset.id);
+    const janela = window.open('', '_blank');
+    const { data, error } = await banco.storage.from('documentos').createSignedUrl(d.caminho, 600);
+    if (error) { janela?.close(); avisar('Não consegui abrir: ' + error.message, true); return; }
+    if (janela) janela.location = data.signedUrl; else location.href = data.signedUrl;
+  },
+  'apagar-doc': async b => {
+    if (!b.dataset.confirmar) { b.dataset.confirmar = '1'; b.textContent = 'Confirmar'; return; }
+    const d = dados.documentos.find(x => x.id === b.dataset.id);
+    const { error } = await banco.storage.from('documentos').remove([d.caminho]);
+    if (error) { avisar('Não consegui apagar o arquivo: ' + error.message, true); return; }
+    if (await apagar('documentos', d.id)) avisar('Documento apagado.');
+  },
   'contato-hoje': b => gravar('clientes', { ultimo_contato: hoje() }, b.dataset.id).then(ok => ok && avisar('Contato registrado.')),
   roteiro: async b => {
     const semana = b.dataset.semana;
@@ -796,12 +861,26 @@ document.addEventListener('submit', async e => {
   const tipo = e.target.dataset.form;
   if (!tipo) return;
   e.preventDefault();
+  if (tipo === 'documento') { await enviarDocumento(e.target); return; }
   const titulo = e.target.titulo.value.trim();
   if (!titulo) return;
   const ok = tipo === 'captura' ? await gravar('tarefas', { titulo })
     : await gravar('metas_semana', { titulo, semana: e.target.dataset.semana });
   if (ok && tipo === 'captura') avisar('Anotado na Caixa de entrada.');
 });
+
+async function enviarDocumento(form) {
+  const arquivo = form.arquivo.files[0];
+  if (!arquivo) return;
+  if (arquivo.size > 20 * 1024 * 1024) { avisar('Arquivo maior que 20 MB.', true); return; }
+  const botao = form.querySelector('button'); botao.disabled = true; botao.textContent = 'Enviando...';
+  ui.tipoDoc = form.tipo.value;
+  const limpo = arquivo.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.\-]+/g, '_');
+  const caminho = `${ui.clienteId}/${Date.now()}-${limpo}`;
+  const { error } = await banco.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || 'application/octet-stream' });
+  if (error) { avisar('Não consegui enviar: ' + error.message, true); botao.disabled = false; botao.textContent = 'Anexar'; return; }
+  if (await gravar('documentos', { cliente_id: ui.clienteId, tipo: form.tipo.value, nome: arquivo.name.replace(/\.[^.]+$/, ''), caminho, data: hoje() })) avisar('Documento anexado.');
+}
 
 $('form-login').onsubmit = async e => {
   e.preventDefault();

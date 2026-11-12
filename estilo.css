@@ -261,3 +261,14 @@ dialog h2 { font-size: 18px; }
   .nav-baixo svg { width: 20px; height: 20px; }
   .nav-baixo button[aria-current="page"] { color: var(--acento-texto); background: var(--acento-suave); font-weight: 600; }
 }
+
+/* Página do cliente */
+.enviar-doc { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.enviar-doc select, .enviar-doc input[type=file] { font: inherit; font-size: 13px; color: var(--texto); }
+.enviar-doc select { border: 1px solid var(--borda); background: var(--superficie); border-radius: 10px; padding: 6px 10px; }
+.enviar-doc input[type=file] { flex: 1; min-width: 0; max-width: 100%; }
+.ficha { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 12px; font-size: 14px; }
+.ficha dt { color: var(--suave); font-weight: 600; }
+.ficha dd { margin: 0; overflow-wrap: anywhere; }
+.notas-cliente { white-space: pre-wrap; font-size: 13.5px; line-height: 1.55; color: var(--suave); background: var(--superficie-2); border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; }
+@media (max-width: 760px) { .ficha { grid-template-columns: 1fr; gap: 2px; } .ficha dd { margin-bottom: 8px; } }
