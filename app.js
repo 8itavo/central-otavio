@@ -35,19 +35,20 @@ const ICONES = {
   subir: '<path d="M4 17 10 11l4 4 6-7"/><path d="M15 8h5v5"/>',
   descer: '<path d="M4 7l6 6 4-4 6 7"/><path d="M15 16h5v-5"/>',
   historico: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+  mapas: '<circle cx="12" cy="12" r="2.6"/><circle cx="4.5" cy="6" r="1.8"/><circle cx="19.5" cy="6" r="1.8"/><circle cx="4.5" cy="18" r="1.8"/><circle cx="19.5" cy="18" r="1.8"/><path d="M10 10.8 6 7.200M14 10.800l4-3.600M10 13.200 6 16.800M14 13.200l4 3.600"/>',
   casa: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10M10 20v-6h4v6"/>'
 };
 // Menu em três frentes: o que é dos dois, a agência e a vida pessoal
 const MENU = [
-  ['Geral', [['geral', 'Visão geral'], ['historico', 'Histórico'], ['semana', 'Semana'], ['tarefas', 'Tarefas']]],
+  ['Geral', [['geral', 'Visão geral'], ['historico', 'Histórico'], ['mapas', 'Mapas mentais'], ['semana', 'Semana'], ['tarefas', 'Tarefas']]],
   ['Agência', [['agencia', 'Painel da agência'], ['clientes', 'Clientes'], ['prospeccao', 'Prospecção']]],
   ['Pessoal', [['pessoal', 'Painel pessoal']]],
   ['Dados', [['lancamentos', 'Lançamentos']]]
 ];
-const MENU_CELULAR = [['geral', 'Geral'], ['agencia', 'Agência'], ['clientes', 'Clientes'], ['pessoal', 'Pessoal'], ['tarefas', 'Tarefas']];
+const MENU_CELULAR = [['geral', 'Geral'], ['agencia', 'Agência'], ['clientes', 'Clientes'], ['pessoal', 'Pessoal'], ['mapas', 'Mapas'], ['tarefas', 'Tarefas']];
 
 /* ---------- Estado ---------- */
-const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [], documentos: [], compromissos: [], imoveis: [] };
+const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [], documentos: [], compromissos: [], imoveis: [], mapas: [] };
 const ui = { tela: 'geral', filtroLanc: 'todos', diaPrioridade: 'hoje', frente: 'todas', escopo: 'empresa', mes: null, statusCliente: 'abertos', deslocamentoSemana: 0, clienteId: null, tipoDoc: 'contrato', periodo: '12', visao: 'tudo' };
 const manipuladores = {};
 
@@ -81,6 +82,7 @@ const traduzirErro = e => e.message.includes('Limite de 3 prioridades') ? 'Esse 
 
 /* ---------- Banco ---------- */
 async function carregar() {
+  if (typeof salvarMapaAgora === 'function') await salvarMapaAgora();
   const nomes = Object.keys(dados);
   const respostas = await Promise.all(nomes.map(n => banco.from(n).select('*')));
   respostas.forEach((r, i) => {
@@ -654,6 +656,8 @@ const TELA = {
       </div>`;
   },
 
+  mapas() { return telaMapas(); },
+
   /* ---------- Histórico mês a mês ---------- */
   historico() {
     const atual = hoje().slice(0, 7);
@@ -998,7 +1002,14 @@ function desenharNav() {
 function desenhar() {
   desenharNav();
   aplicarTema();
+  const areaAntiga = $('mapa-area'), rolagem = areaAntiga ? [areaAntiga.scrollLeft, areaAntiga.scrollTop, areaAntiga.dataset.mapa] : null;
   $('tela').innerHTML = TELA[ui.tela]();
+  if (ui.tela === 'mapas') {
+    desenharMapa();
+    const area = $('mapa-area'); // redesenho completo (ex.: dados recarregados) mantém a posição do mapa
+    if (area && rolagem && rolagem[2] === mapaUI.id && !mapaUI.centrar) { area.scrollLeft = rolagem[0]; area.scrollTop = rolagem[1]; }
+    if (area) area.dataset.mapa = mapaUI.id;
+  }
 }
 
 /* ---------- Ações ---------- */
@@ -1110,4 +1121,221 @@ function mostrar(logado) {
 banco.auth.onAuthStateChange((_evento, sessao) => {
   // Fora do callback: chamar o banco aqui dentro pode travar a sessão
   setTimeout(() => mostrar(Boolean(sessao)), 0);
+});
+
+/* ---------- Mapas mentais ---------- */
+// Cada mapa guarda uma árvore em `dados`: { id, texto, cor?, recolhido?, filhos: [...] }. O título do mapa é a ideia central.
+const mapaUI = { id: null, sel: null, editando: null, zoom: 1, centrar: false, confirmarExcluir: false };
+let mapaTimer = null, mapaPendente = null;
+const novoNo = (texto = 'Nova ideia') => ({ id: Math.random().toString(36).slice(2, 10), texto, filhos: [] });
+function acharNo(raiz, id, pai = null) {
+  if (raiz.id === id) return { no: raiz, pai };
+  for (const f of raiz.filhos || []) { const r = acharNo(f, id, raiz); if (r) return r; }
+  return null;
+}
+const contarNos = n => 1 + (n.filhos || []).reduce((s, f) => s + contarNos(f), 0);
+const mapaAtual = () => dados.mapas.find(m => m.id === mapaUI.id);
+function salvarMapa() {
+  const m = mapaAtual(); if (!m) return;
+  m.titulo = m.dados.texto || 'Sem título';
+  m.atualizado_em = new Date().toISOString();
+  mapaPendente = m;
+  clearTimeout(mapaTimer);
+  mapaTimer = setTimeout(salvarMapaAgora, 500);
+}
+async function salvarMapaAgora() {
+  clearTimeout(mapaTimer);
+  const m = mapaPendente; mapaPendente = null;
+  if (!m) return;
+  const { error } = await banco.from('mapas').update({ titulo: m.titulo, frente: m.frente, dados: m.dados, atualizado_em: m.atualizado_em }).eq('id', m.id);
+  if (error) avisar('Não consegui salvar o mapa: ' + error.message, true);
+}
+const CORES_MAPA = ['#6c5ce7', '#00a884', '#f39c12', '#e84393', '#0984e3', '#d35400', '#16a085', '#8e44ad'];
+
+function telaMapas() {
+  const m = mapaAtual();
+  if (!m) {
+    mapaUI.id = null;
+    const mapas = dados.mapas.slice().sort((a, b) => b.atualizado_em.localeCompare(a.atualizado_em));
+    return topo('Mapas mentais', 'Organize ideias em mapas: uma ideia no centro e os galhos em volta',
+      '<button class="btn azul" data-acao="mapa-novo">Novo mapa</button>') + (mapas.length ? `<div class="grade-mapas">${mapas.map(x => `
+        <button class="cartao-mapa" data-acao="mapa-abrir" data-id="${x.id}">
+          <b>${esc(x.titulo)}</b>
+          <small>${contarNos(x.dados) - 1} ideia(s) · ${x.frente ? esc(FRENTES[x.frente] || x.frente) + ' · ' : ''}${fmtData(x.atualizado_em.slice(0, 10))}</small>
+          <span class="galhos">${(x.dados.filhos || []).slice(0, 6).map((f, i) => `<i style="--cor:${CORES_MAPA[(f.cor ?? i) % CORES_MAPA.length]}">${esc(f.texto)}</i>`).join('')}</span>
+        </button>`).join('')}</div>`
+      : '<section class="cartao"><p class="vazio">Nenhum mapa ainda. Clique em "Novo mapa" para começar.</p></section>');
+  }
+  const b = (acao, rot, titulo, extra = '') => `<button class="btn pequeno ${extra}" data-acao="${acao}" title="${esc(titulo)}">${rot}</button>`;
+  return `<div class="mapa-tela">
+    <div class="mapa-barra">
+      ${b('mapa-voltar', '‹ Mapas', 'Voltar para a lista')}
+      <span class="sep"></span>
+      ${b('mapa-filho', '+ Galho', 'Nova ideia ligada à selecionada (Tab)', 'azul')}
+      ${b('mapa-irmao', '+ Ao lado', 'Nova ideia no mesmo nível (Enter)')}
+      ${b('mapa-editar', 'Escrever', 'Mudar o texto (F2 ou dois cliques)')}
+      ${b('mapa-cor', 'Cor', 'Trocar a cor do galho')}
+      ${b('mapa-recolher', 'Abrir/fechar', 'Esconder ou mostrar o que está dentro')}
+      ${b('mapa-tarefa', 'Virar tarefa', 'Cria uma tarefa com esta ideia')}
+      ${b('mapa-apagar-no', 'Apagar ideia', 'Apaga a ideia e o que está dentro (Delete)', 'perigo')}
+      <span class="sep"></span>
+      ${b('mapa-zoom', '−', 'Diminuir', '" data-valor="-1')}${b('mapa-zoom', '+', 'Aumentar', '" data-valor="1')}
+      <select class="mapa-frente" aria-label="Frente do mapa"><option value="">Sem frente</option>${Object.entries(FRENTES).map(([v, r]) => `<option value="${v}" ${m.frente === v ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select>
+      ${b('mapa-excluir', mapaUI.confirmarExcluir ? 'Confirmar: apagar o mapa' : 'Apagar mapa', 'Apaga o mapa inteiro', 'perigo')}
+    </div>
+    <div class="mapa-area" id="mapa-area"><div class="mapa-palco" id="mapa-palco"></div></div>
+    <p class="nota">Clique numa ideia para selecionar. <b>Tab</b> cria um galho, <b>Enter</b> cria ao lado, <b>F2</b> ou dois cliques para escrever, <b>Delete</b> apaga.</p>
+  </div>`;
+}
+
+function desenharMapa() {
+  const palco = $('mapa-palco'), area = $('mapa-area');
+  const m = mapaAtual();
+  if (!palco || !m) return;
+  const raiz = m.dados;
+  if (!mapaUI.sel || !acharNo(raiz, mapaUI.sel)) mapaUI.sel = raiz.id;
+  const nRaiz = (raiz.filhos || []).length, metade = Math.ceil(nRaiz / 2);
+  const itens = [];
+  const visitar = (n, prof, lado, cor, pai) => {
+    const it = { n, prof, lado, cor, pai, filhos: [] };
+    itens.push(it); if (pai) pai.filhos.push(it);
+    if (!n.recolhido) (n.filhos || []).forEach((f, i) => visitar(f, prof + 1, prof === 0 ? (i < metade ? 1 : -1) : lado,
+      f.cor !== undefined ? CORES_MAPA[f.cor % CORES_MAPA.length] : prof === 0 ? CORES_MAPA[i % CORES_MAPA.length] : cor, it));
+  };
+  visitar(raiz, 0, 1, 'var(--acento)', null);
+  const z = mapaUI.zoom;
+  palco.innerHTML = `<div class="mapa-escala" style="transform:scale(${z});width:6000px;height:10px"><svg id="mapa-linhas"></svg>${itens.map(it => {
+    const n = it.n, escondidos = n.recolhido ? contarNos(n) - 1 : 0;
+    const conteudo = mapaUI.editando === n.id ? `<input value="${esc(n.texto)}" aria-label="Texto da ideia" maxlength="200">` : esc(n.texto) + (escondidos ? `<span class="qtd">+${escondidos}</span>` : '');
+    return `<div class="no prof-${Math.min(it.prof, 2)} ${mapaUI.sel === n.id ? 'sel' : ''}" data-acao="mapa-sel" data-id="${n.id}" style="--cor:${it.cor}">${conteudo}</div>`;
+  }).join('')}</div>`;
+  // Medir e posicionar: árvore para os dois lados, raiz no meio
+  const els = {}; palco.querySelectorAll('.no').forEach(el => { els[el.dataset.id] = el; });
+  itens.forEach(it => { it.w = els[it.n.id].offsetWidth; it.h = els[it.n.id].offsetHeight; });
+  const GY = 14, GX = 54;
+  const sub = it => it._s ?? (it._s = Math.max(it.h, it.filhos.reduce((s, f) => s + sub(f), 0) + GY * Math.max(0, it.filhos.length - 1)));
+  const colocar = (lista, xBorda, cy, lado) => {
+    const total = lista.reduce((s, f) => s + sub(f), 0) + GY * Math.max(0, lista.length - 1);
+    let y = cy - total / 2;
+    lista.forEach(f => {
+      const fy = y + sub(f) / 2;
+      f.x = lado === 1 ? xBorda + GX : xBorda - GX - f.w; f.y = fy - f.h / 2;
+      colocar(f.filhos, lado === 1 ? f.x + f.w : f.x, fy, lado);
+      y += sub(f) + GY;
+    });
+  };
+  const r = itens[0]; r.x = -r.w / 2; r.y = -r.h / 2;
+  colocar(r.filhos.filter(f => f.lado === 1), r.x + r.w, 0, 1);
+  colocar(r.filhos.filter(f => f.lado === -1), r.x, 0, -1);
+  const P = 60;
+  const minX = Math.min(...itens.map(i => i.x)) - P, minY = Math.min(...itens.map(i => i.y)) - P;
+  const maxX = Math.max(...itens.map(i => i.x + i.w)) + P, maxY = Math.max(...itens.map(i => i.y + i.h)) + P;
+  const W = Math.max(maxX - minX, area.clientWidth / z), H = Math.max(maxY - minY, area.clientHeight / z);
+  const dx = -minX + (W - (maxX - minX)) / 2, dy = -minY + (H - (maxY - minY)) / 2;
+  itens.forEach(it => { const el = els[it.n.id]; el.style.left = (it.x + dx) + 'px'; el.style.top = (it.y + dy) + 'px'; });
+  palco.style.width = W * z + 'px'; palco.style.height = H * z + 'px';
+  const escala = palco.firstElementChild; escala.style.width = W + 'px'; escala.style.height = H + 'px';
+  const svg = $('mapa-linhas'); svg.setAttribute('width', W); svg.setAttribute('height', H);
+  svg.innerHTML = itens.filter(it => it.pai).map(it => {
+    const p = it.pai, lado = it.lado;
+    const x1 = (lado === 1 ? p.x + p.w : p.x) + dx, y1 = p.y + p.h / 2 + dy;
+    const x2 = (lado === 1 ? it.x : it.x + it.w) + dx, y2 = it.y + it.h / 2 + dy;
+    const mx = (x1 + x2) / 2;
+    return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${it.cor}" stroke-width="${it.prof === 1 ? 3.5 : 2}" stroke-linecap="round" opacity=".75"/>`;
+  }).join('');
+  if (mapaUI.centrar) {
+    mapaUI.centrar = false;
+    area.scrollLeft = (r.x + r.w / 2 + dx) * z - area.clientWidth / 2;
+    area.scrollTop = (r.y + r.h / 2 + dy) * z - area.clientHeight / 2;
+  }
+  const input = palco.querySelector('.no input');
+  if (input) { input.focus(); input.select(); }
+  else els[mapaUI.sel]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function mapaAdicionar(comoFilho) {
+  const m = mapaAtual(); if (!m) return;
+  const achado = acharNo(m.dados, mapaUI.sel) || { no: m.dados, pai: null };
+  const novo = novoNo();
+  if (comoFilho || !achado.pai) { achado.no.recolhido = false; (achado.no.filhos ||= []).push(novo); }
+  else achado.pai.filhos.splice(achado.pai.filhos.indexOf(achado.no) + 1, 0, novo);
+  mapaUI.sel = novo.id; mapaUI.editando = novo.id;
+  salvarMapa(); desenharMapa();
+}
+function mapaTerminarEdicao(salvar = true) {
+  const id = mapaUI.editando; if (!id) return;
+  const input = document.querySelector('#mapa-palco .no input');
+  mapaUI.editando = null;
+  const achado = acharNo(mapaAtual().dados, id);
+  if (salvar && achado && input) { achado.no.texto = input.value.trim() || 'Sem texto'; salvarMapa(); }
+  desenharMapa();
+}
+function mapaApagarNo() {
+  const m = mapaAtual(); const achado = acharNo(m.dados, mapaUI.sel);
+  if (!achado?.pai) { avisar('A ideia central não pode ser apagada. Use "Apagar mapa".', true); return; }
+  const i = achado.pai.filhos.indexOf(achado.no);
+  achado.pai.filhos.splice(i, 1);
+  mapaUI.sel = (achado.pai.filhos[i] || achado.pai.filhos[i - 1] || achado.pai).id;
+  salvarMapa(); desenharMapa();
+}
+
+Object.assign(manipuladores, {
+  'mapa-novo': async () => {
+    const { data, error } = await banco.from('mapas').insert({ titulo: 'Ideia central', dados: { id: 'raiz', texto: 'Ideia central', filhos: [] } }).select().single();
+    if (error) { avisar('Não consegui criar o mapa: ' + error.message, true); return; }
+    dados.mapas.push(data);
+    Object.assign(mapaUI, { id: data.id, sel: 'raiz', editando: 'raiz', zoom: 1, centrar: true, confirmarExcluir: false });
+    desenhar();
+  },
+  'mapa-abrir': b => { Object.assign(mapaUI, { id: b.dataset.id, sel: null, editando: null, centrar: true, confirmarExcluir: false, zoom: innerWidth < 760 ? 0.8 : 1 }); desenhar(); window.scrollTo(0, 0); },
+  'mapa-voltar': async () => { await salvarMapaAgora(); mapaUI.id = null; desenhar(); },
+  'mapa-sel': b => { if (mapaUI.editando === b.dataset.id) return; if (mapaUI.editando) mapaTerminarEdicao(); mapaUI.sel = b.dataset.id; desenharMapa(); },
+  'mapa-filho': () => { mapaTerminarEdicao(); mapaAdicionar(true); },
+  'mapa-irmao': () => { mapaTerminarEdicao(); mapaAdicionar(false); },
+  'mapa-editar': () => { mapaUI.editando = mapaUI.sel; desenharMapa(); },
+  'mapa-cor': () => {
+    const achado = acharNo(mapaAtual().dados, mapaUI.sel);
+    if (!achado?.pai) { avisar('Selecione um galho para trocar a cor.'); return; }
+    const atual = achado.no.cor ?? (achado.pai === mapaAtual().dados ? achado.pai.filhos.indexOf(achado.no) : -1);
+    achado.no.cor = (atual + 1) % CORES_MAPA.length; salvarMapa(); desenharMapa();
+  },
+  'mapa-recolher': () => {
+    const achado = acharNo(mapaAtual().dados, mapaUI.sel);
+    if (!achado?.no.filhos?.length) { avisar('Essa ideia não tem nada dentro.'); return; }
+    achado.no.recolhido = !achado.no.recolhido; salvarMapa(); desenharMapa();
+  },
+  'mapa-apagar-no': () => mapaApagarNo(),
+  'mapa-tarefa': async () => {
+    const m = mapaAtual(), achado = acharNo(m.dados, mapaUI.sel);
+    await salvarMapaAgora();
+    if (await gravar('tarefas', { titulo: achado.no.texto, frente: m.frente || null, status: m.frente ? 'a_fazer' : 'caixa', notas: 'Veio do mapa "' + m.titulo + '"' })) avisar('Tarefa criada' + (m.frente ? '.' : ' na Caixa de entrada.'));
+  },
+  'mapa-zoom': b => { mapaUI.zoom = Math.min(1.6, Math.max(0.4, Math.round((mapaUI.zoom + Number(b.dataset.valor) * 0.2) * 10) / 10)); desenharMapa(); },
+  'mapa-excluir': async () => {
+    if (!mapaUI.confirmarExcluir) { mapaUI.confirmarExcluir = true; desenhar(); return; }
+    clearTimeout(mapaTimer); mapaPendente = null;
+    const id = mapaUI.id; mapaUI.id = null; mapaUI.confirmarExcluir = false;
+    if (await apagar('mapas', id)) avisar('Mapa apagado.');
+  }
+});
+
+document.addEventListener('change', e => {
+  if (!e.target.matches('.mapa-frente')) return;
+  const m = mapaAtual(); m.frente = e.target.value || null; salvarMapa();
+});
+document.addEventListener('dblclick', e => {
+  const no = e.target.closest('#mapa-palco .no');
+  if (no && !mapaUI.editando) { mapaUI.sel = no.dataset.id; mapaUI.editando = no.dataset.id; desenharMapa(); }
+});
+document.addEventListener('focusout', e => { if (e.target.matches('#mapa-palco .no input') && mapaUI.editando) setTimeout(() => mapaTerminarEdicao(), 0); });
+document.addEventListener('keydown', e => {
+  if (ui.tela !== 'mapas' || !mapaUI.id || $('dialogo')?.open) return;
+  if (e.target.matches('#mapa-palco .no input')) {
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); mapaTerminarEdicao(); if (e.key === 'Tab') mapaAdicionar(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); mapaTerminarEdicao(false); }
+    return;
+  }
+  if (e.target.matches('input, textarea, select')) return;
+  const acoes = { Tab: () => mapaAdicionar(true), Enter: () => mapaAdicionar(false), F2: () => manipuladores['mapa-editar'](), ' ': () => manipuladores['mapa-editar'](), Delete: mapaApagarNo, Backspace: mapaApagarNo };
+  if (acoes[e.key]) { e.preventDefault(); acoes[e.key](); }
 });

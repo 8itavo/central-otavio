@@ -256,7 +256,7 @@ dialog h2 { font-size: 18px; }
   .rosca { width: 120px; height: 120px; }
   .campos { grid-template-columns: minmax(0, 1fr); }
   .quadro { grid-auto-columns: minmax(240px, 80%); }
-  .nav-baixo { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; z-index: 10; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); background: var(--superficie); border: 1px solid var(--borda); border-radius: 22px; padding: 6px 4px; box-shadow: 0 10px 30px rgba(27, 29, 41, .15); }
+  .nav-baixo { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); position: fixed; z-index: 10; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); background: var(--superficie); border: 1px solid var(--borda); border-radius: 22px; padding: 6px 4px; box-shadow: 0 10px 30px rgba(27, 29, 41, .15); }
   .nav-baixo button { border: 0; background: none; color: var(--suave); display: grid; justify-items: center; gap: 2px; font-size: 10.5px; padding: 6px 0; border-radius: 15px; min-width: 0; }
   .nav-baixo svg { width: 20px; height: 20px; }
   .nav-baixo button[aria-current="page"] { color: var(--acento-texto); background: var(--acento-suave); font-weight: 600; }
@@ -359,3 +359,34 @@ h3.sub small { color: var(--suave); font-weight: 500; font-size: 12px; margin-le
   .tabela-historico { font-size: 12.5px; }
 }
 .metrica .rotulo { min-width: 0; } .metrica .rotulo span { min-width: 0; }
+
+/* Mapas mentais */
+.grade-mapas { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.cartao-mapa { text-align: left; display: grid; gap: 8px; align-content: start; background: var(--superficie); border: 1px solid var(--borda); border-radius: 20px; padding: 18px; color: var(--texto); font: inherit; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+.cartao-mapa:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(30, 30, 80, .08); }
+.cartao-mapa b { font-size: 16px; }
+.cartao-mapa small { color: var(--suave); font-size: 12.5px; }
+.cartao-mapa .galhos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.cartao-mapa .galhos i { font-style: normal; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px; color: var(--cor); background: color-mix(in srgb, var(--cor) 14%, transparent); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapa-tela { display: grid; gap: 12px; }
+.mapa-barra { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; background: var(--superficie); border: 1px solid var(--borda); border-radius: 16px; padding: 10px 12px; }
+.mapa-barra .sep { width: 1px; height: 22px; background: var(--borda); margin: 0 4px; }
+.mapa-barra select { border: 1px solid var(--borda); border-radius: 10px; padding: 5px 8px; background: var(--superficie); color: var(--texto); font: inherit; font-size: 13px; }
+.mapa-area { overflow: auto; height: calc(100vh - 230px); min-height: 420px; border: 1px solid var(--borda); border-radius: 20px; background-color: var(--superficie); background-image: radial-gradient(var(--linha) 1.2px, transparent 1.2px); background-size: 22px 22px; }
+.mapa-palco { position: relative; }
+.mapa-escala { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.mapa-escala svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.no { position: absolute; max-width: 210px; padding: 7px 12px; border-radius: 12px; background: var(--superficie); border: 2px solid var(--cor); color: var(--texto); font-size: 13.5px; font-weight: 500; line-height: 1.35; cursor: pointer; user-select: none; overflow-wrap: anywhere; white-space: normal; box-shadow: 0 1px 3px rgba(20, 20, 60, .06); }
+.no.prof-0 { background: var(--acento); color: #fff; border-color: transparent; font-size: 17px; font-weight: 700; padding: 14px 22px; border-radius: 18px; max-width: 250px; text-align: center; box-shadow: 0 8px 22px color-mix(in srgb, var(--acento) 35%, transparent); }
+.no.prof-1 { background: color-mix(in srgb, var(--cor) 15%, var(--superficie)); font-weight: 600; font-size: 14.5px; }
+.no.prof-2 { border-width: 0 0 2.5px; border-radius: 4px; background: transparent; box-shadow: none; padding: 4px 4px 5px; }
+.no.sel { outline: 3px solid color-mix(in srgb, var(--cor) 45%, transparent); outline-offset: 3px; }
+.no.prof-0.sel { outline-color: color-mix(in srgb, var(--acento) 40%, transparent); }
+.no input { font: inherit; color: inherit; background: transparent; border: 0; outline: 0; padding: 0; width: 180px; text-align: inherit; }
+.no .qtd { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; color: #fff; background: var(--cor); border-radius: 99px; padding: 1px 7px; vertical-align: 1px; }
+@media (max-width: 760px) {
+  .mapa-area { height: calc(100vh - 330px); min-height: 360px; }
+  .mapa-barra .sep { display: none; }
+  .mapa-tela .nota { display: none; }
+}
+.mapa-barra select { width: auto; margin: 0; }
