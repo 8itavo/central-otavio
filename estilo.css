@@ -300,3 +300,43 @@ dialog h2 { font-size: 18px; }
 @media (max-width: 1240px) { .grade.painel-clientes { grid-template-columns: 1fr; } .coluna-lateral { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .coluna-lateral { grid-template-columns: 1fr; } .contratos { grid-template-columns: 1fr; } }
 .fatia-receita .rotulo b { white-space: nowrap; }
+
+/* Barras empilhadas (recebido por cliente) */
+.barras.empilhadas { height: 230px; gap: 14px; }
+.barras.empilhadas .coluna-barra .pilha { max-width: 46px; display: flex; flex-direction: column-reverse; background: transparent; border-radius: 10px; }
+.barras.empilhadas .pilha span { display: block; min-height: 3px; }
+.barras.empilhadas .pilha span:first-of-type { border-radius: 0 0 10px 10px; }
+.barras.empilhadas .pilha span:last-of-type { border-radius: 10px 10px 0 0; }
+.barras.empilhadas .pilha span:only-of-type { border-radius: 10px; }
+.barras.empilhadas .pilha span + span { border-top: 2px solid var(--superficie); }
+.barras.empilhadas .barra.destaque small { color: var(--acento-texto); font-weight: 700; }
+.barras.empilhadas + .legenda-linha { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+p.nota { color: var(--suave); font-size: 12.5px; margin: 12px 0 0; line-height: 1.5; }
+.fraco { color: var(--fraco); }
+
+/* Tabela de clientes ativos */
+.tabela-rolagem { overflow-x: auto; margin: 0 -4px; }
+.tabela-clientes { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tabela-clientes th { text-align: left; font-size: 12px; font-weight: 600; color: var(--suave); padding: 6px 10px; white-space: nowrap; }
+.tabela-clientes td { padding: 10px; border-top: 1px solid var(--linha); vertical-align: middle; white-space: nowrap; }
+.tabela-clientes .num { text-align: right; font-variant-numeric: tabular-nums; }
+.tabela-clientes tr.clicavel { cursor: pointer; }
+.tabela-clientes tbody tr:hover { background: var(--superficie-2); }
+.cel-cliente { display: flex; align-items: center; gap: 10px; }
+.cel-cliente b { display: block; font-weight: 600; }
+.cel-cliente small { color: var(--suave); font-size: 12px; }
+
+/* Despesas fixas e parcelas */
+.lista.compromissos .compromisso { border-top: 1px solid var(--linha); padding-bottom: 10px; list-style: none; cursor: pointer; }
+.lista.compromissos .compromisso .linha { border-top: 0; }
+.lista.compromissos .compromisso:first-child { border-top: 0; }
+.pago-total { display: block; color: var(--suave); font-size: 12px; margin-top: 5px; }
+h3.sub { font-size: 13px; font-weight: 600; color: var(--suave); margin: 18px 0 0; }
+@media (max-width: 760px) {
+  .tabela-clientes th:nth-child(2), .tabela-clientes td:nth-child(2), .tabela-clientes th:nth-child(6), .tabela-clientes td:nth-child(6) { display: none; }
+  .tabela-clientes td, .tabela-clientes th { padding: 9px 6px; white-space: normal; }
+  .tabela-clientes .avatar { display: none; }
+  .barras.empilhadas { gap: 8px; }
+}
+.barras-compromisso .barras { height: 150px; padding-top: 28px; }
+.barras-compromisso .barra .coluna-barra em { font-size: 10.5px; white-space: nowrap; }

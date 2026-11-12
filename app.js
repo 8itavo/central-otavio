@@ -45,7 +45,7 @@ const MENU = [
 const MENU_CELULAR = [['geral', 'Geral'], ['agencia', 'Agência'], ['clientes', 'Clientes'], ['pessoal', 'Pessoal'], ['tarefas', 'Tarefas']];
 
 /* ---------- Estado ---------- */
-const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [], documentos: [] };
+const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [], documentos: [], compromissos: [] };
 const ui = { tela: 'geral', filtroLanc: 'todos', diaPrioridade: 'hoje', frente: 'todas', escopo: 'empresa', mes: null, statusCliente: 'abertos', deslocamentoSemana: 0, clienteId: null, tipoDoc: 'contrato' };
 const manipuladores = {};
 
@@ -152,6 +152,16 @@ const FORMULARIOS = {
     { n: 'pago', r: 'Situação', op: [['false', 'Em aberto'], ['true', 'Pago / recebido']], bool: true, largo: true },
     { n: 'notas', r: 'Notas', area: true, largo: true }
   ], antes: (v, reg) => ({ ...v, pago_em: v.pago ? (reg?.pago_em || hoje()) : null }) },
+  compromissos: { nome: 'despesa fixa ou parcela', campos: () => [
+    { n: 'descricao', r: 'O que é (ex.: MBA Subido Pró)', largo: true, req: true },
+    { n: 'escopo', r: 'De quem é', op: opcoes(ESCOPOS) },
+    { n: 'valor', r: 'Valor por mês ou da parcela (R$)', tipo: 'number', num: true, req: true },
+    { n: 'parcelas', r: 'Número de parcelas (vazio = todo mês, sem fim)', tipo: 'number', num: true, min: 1 },
+    { n: 'inicio', r: 'Mês da 1ª parcela', tipo: 'date', req: true },
+    { n: 'ja_pago', r: 'Entrada já paga (R$)', tipo: 'number', num: true },
+    { n: 'categoria', r: 'Categoria' }, { n: 'forma', r: 'Como paga (cartão, Pix...)' },
+    { n: 'notas', r: 'Notas', area: true, largo: true }
+  ], antes: v => ({ ...v, ja_pago: v.ja_pago || 0 }) },
   contas: { nome: 'conta', campos: () => [
     { n: 'nome', r: 'Nome da conta (ex.: Nubank PJ)', largo: true, req: true },
     { n: 'escopo', r: 'De quem é', op: opcoes(ESCOPOS) },
@@ -209,7 +219,53 @@ function abrirFormulario(tabela, id, padrao = {}) {
   d.showModal();
 }
 
+/* ---------- Despesas fixas e parcelas ---------- */
+const mesesEntre = (a, b) => (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5, 7)) - Number(a.slice(5, 7));
+function parcelaNoMes(c, m) { // número da parcela que cai no mês m (0 = não cai)
+  const n = mesesEntre(c.inicio.slice(0, 7), m) + 1;
+  if (!c.ativo || n < 1 || (c.parcelas && n > c.parcelas)) return 0;
+  return n;
+}
+const comprometidoNoMes = (m, escopo) => dados.compromissos.filter(c => c.escopo === escopo && parcelaNoMes(c, m)).reduce((s, c) => s + Number(c.valor), 0);
+function cartaoCompromissos(escopo, m = hoje().slice(0, 7)) {
+  const itens = dados.compromissos.filter(c => c.escopo === escopo && c.ativo && (!c.parcelas || parcelaNoMes(c, m) || c.inicio.slice(0, 7) > m))
+    .sort((a, b) => b.valor - a.valor);
+  const proximos = ultimosMeses(somarMes(m, 5), 6).map(mm => ({ rotulo: rotuloMes(mm), valor: comprometidoNoMes(mm, escopo), destaque: mm === m }));
+  const linha = c => {
+    const n = parcelaNoMes(c, m);
+    const total = c.parcelas ? Number(c.valor) * c.parcelas + Number(c.ja_pago) : 0;
+    const pago = c.parcelas ? Number(c.ja_pago) + Number(c.valor) * Math.max(0, Math.min(c.parcelas, mesesEntre(c.inicio.slice(0, 7), m))) : 0;
+    const info = !c.parcelas ? 'Todo mês' + (c.forma ? ' · ' + c.forma : '')
+      : n ? `Parcela ${n} de ${c.parcelas} · termina em ${rotuloMes(somarMes(c.inicio.slice(0, 7), c.parcelas - 1))}/${somarMes(c.inicio.slice(0, 7), c.parcelas - 1).slice(2, 4)}`
+      : `Começa em ${rotuloMes(c.inicio.slice(0, 7))}/${c.inicio.slice(2, 4)} · ${c.parcelas}x`;
+    return `<li class="compromisso clicavel" data-acao="editar" data-tabela="compromissos" data-id="${c.id}" role="button" tabindex="0">
+      <div class="linha">${avatar(c.descricao, c.descricao)}<div class="corpo"><b>${esc(c.descricao)}</b><small>${esc(info)}</small></div><span class="valor">${moeda(c.valor)}</span></div>
+      ${c.parcelas ? `<div class="progresso"><div style="width:${pago / (total || 1) * 100}%"></div></div><small class="pago-total">Pago ${moedaCurta(pago)} de ${moedaCurta(total)}${Number(c.ja_pago) ? ` (entrada de ${moedaCurta(c.ja_pago)})` : ''}</small>` : ''}
+    </li>`;
+  };
+  return `<section class="cartao"><h2>Despesas fixas e parcelas <small>${moedaCurta(comprometidoNoMes(m, escopo))} neste mês</small></h2>
+    ${itens.length ? `<ul class="lista compromissos">${itens.map(linha).join('')}</ul>` : '<p class="vazio">Nada cadastrado.</p>'}
+    <h3 class="sub">Já comprometido nos próximos meses</h3><div class="barras-compromisso">${barras(proximos, v => (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil')}</div>
+    <p>${botaoNovo('compromissos', 'Nova despesa ou parcela', JSON.stringify({ escopo, inicio: hoje() }))}</p></section>`;
+}
+
+// Barras empilhadas: meses [{rotulo, destaque, partes: {chave: valor}}], series [{chave, rotulo}]
+function barrasEmpilhadas(meses, series) {
+  const totais = meses.map(x => Object.values(x.partes).reduce((s, v) => s + v, 0));
+  const max = Math.max(1, ...totais);
+  return `<div class="barras empilhadas">${meses.map((x, i) => `<div class="barra ${x.destaque ? 'destaque' : ''}">
+    <div class="coluna-barra"><div class="pilha" style="height:${Math.max(totais[i] / max * 100, 2)}%">${totais[i] ? `<em>${esc(moedaCurta(totais[i]))}</em>` : ''}
+      ${series.map((s, k) => x.partes[s.chave] ? `<span style="flex:${x.partes[s.chave]};background:${CORES[k % CORES.length]}" title="${esc(s.rotulo)}: ${esc(moeda(x.partes[s.chave]))}"></span>` : '').join('')}</div></div>
+    <small>${esc(x.rotulo)}</small></div>`).join('')}</div>
+    <ul class="legenda legenda-linha">${series.map((s, k) => `<li><i style="background:${CORES[k % CORES.length]}"></i><span>${esc(s.rotulo)}</span></li>`).join('')}</ul>`;
+}
+
 /* ---------- Contratos (clientes agrupados por quem paga) ---------- */
+const nomeCurto = c => c.grupo || c.nome.split(/ - | \(/)[0];
+function clienteDoLancamento(l) {
+  for (const c of dados.clientes) { const re = regexPagador(c); if (re && re.test(l.descricao || '')) return c; }
+  return null;
+}
 const ehReceitaCliente = l => l.tipo === 'entrada' && ((l.escopo === 'empresa' && l.categoria === 'Receita de clientes') || ehClienteNoPessoal(l));
 function regexPagador(c) { try { return c.pagador ? new RegExp(c.pagador, 'i') : null; } catch (e) { return null; } }
 function contratosAtivos(abertos) {
@@ -230,33 +286,12 @@ function contratosAtivos(abertos) {
     else if (c.proxima_acao_em && c.proxima_acao_em >= hoje() && /parcela|pagamento/i.test(c.proxima_acao || '')) situacao = { chave: 'aguardando', texto: `Próxima parcela em ${fmtData(c.proxima_acao_em)}`, cor: '' };
     else if (c.dia_vencimento && dia <= c.dia_vencimento) situacao = { chave: 'aguardando', texto: `Vence dia ${c.dia_vencimento}`, cor: '' };
     else situacao = { chave: 'aberto', texto: 'Aguardando pagamento do mês', cor: 'ambar' };
-    return { id: c.id, nome: c.grupo || c.nome, unidades: us, valor, recebidoMes, situacao, inicio: c.contrato_inicio, fim: c.contrato_fim, status: us.some(u => u.status === 'em_risco') ? 'em_risco' : c.status,
+    const ultimoPag = re ? dados.lancamentos.filter(l => l.tipo === 'entrada' && re.test(l.descricao || '')).sort((a, b) => b.vencimento.localeCompare(a.vencimento))[0] : null;
+    return { id: c.id, nome: nomeCurto(c), conta: ultimoPag ? (ultimoPag.escopo === 'pessoal' ? 'Pix pessoal' : 'Conta PJ') : 'Sem pagamento ainda', unidades: us, valor, recebidoMes, situacao, inicio: c.contrato_inicio, fim: c.contrato_fim, status: us.some(u => u.status === 'em_risco') ? 'em_risco' : c.status,
       docs: new Set(dados.documentos.filter(d => us.some(u => u.id === d.cliente_id)).map(d => d.nome)).size,
       entregas: dados.tarefas.filter(t => t.status !== 'feita' && us.some(u => u.id === t.cliente_id)).length,
       acao: us.find(u => u.proxima_acao) };
   }).sort((a, b) => b.valor - a.valor);
-}
-function cartaoContrato(k) {
-  let prazo = '<small class="prazo">Sem data de término no contrato</small>';
-  if (k.fim) {
-    const falta = diasEntre(hoje(), k.fim);
-    const total = k.inicio ? Math.max(1, diasEntre(k.inicio, k.fim)) : 0;
-    const frac = total ? Math.min(1, Math.max(0, diasEntre(k.inicio, hoje()) / total)) : 0;
-    prazo = `<div class="prazo"><div class="progresso ${falta <= 30 ? 'alerta' : ''}"><div style="width:${frac * 100}%"></div></div>
-      <small>${falta < 0 ? 'Terminou em ' + fmtData(k.fim) : `Termina em ${fmtData(k.fim, { day: '2-digit', month: '2-digit', year: 'numeric' })} · faltam ${falta} dia(s)`}</small></div>`;
-  }
-  const extras = [k.docs ? `${k.docs} documento(s)` : 'Sem documentos', k.entregas ? `${k.entregas} entrega(s) em aberto` : '', k.acao ? `Próximo: ${k.acao.proxima_acao}${k.acao.proxima_acao_em ? ' em ' + fmtData(k.acao.proxima_acao_em) : ''}` : ''].filter(Boolean);
-  return `<article class="contrato">
-    <div class="contrato-topo clicavel" data-acao="abrir-cliente" data-id="${k.id}" role="button" tabindex="0">
-      ${avatar(k.nome, k.nome)}
-      <div class="corpo"><b>${esc(k.nome)}</b><small>${k.unidades.length > 1 ? k.unidades.length + ' unidades' : esc(k.unidades[0].contato || STATUS_CLIENTE[k.status])}</small></div>
-      <div class="contrato-valor"><strong>${moeda(k.valor)}</strong><small>por mês</small></div>
-    </div>
-    <span class="selo ${k.situacao.cor}">${esc(k.situacao.texto)}</span>
-    ${prazo}
-    ${k.unidades.length > 1 ? `<div class="unidades">${k.unidades.map(u => `<button class="pilula" data-acao="abrir-cliente" data-id="${u.id}">${esc(u.nome.replace(/^(Colégio|Escola) Adventista (de |do |da )?/i, '').replace(/[()]/g, ''))}</button>`).join('')}</div>` : ''}
-    <small class="contrato-extras">${extras.map(esc).join(' · ')}</small>
-  </article>`;
 }
 
 /* ---------- Pedaços de tela ---------- */
@@ -405,7 +440,7 @@ const CORES_AVATAR = [['--t-lilas', '--c-lilas'], ['--t-menta', '--c-menta'], ['
 function avatar(texto, chave) {
   let h = 0; for (const ch of String(chave || texto)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const [f, c] = CORES_AVATAR[h % CORES_AVATAR.length];
-  const iniciais = String(texto).replace(/^(Pix para|Recebido de|Compra no débito -|Pagamento efetuado -)\s*/i, '').trim().split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase();
+  const iniciais = String(texto).replace(/^(Pix para|Recebido de|Compra no débito -|Pagamento efetuado -)\s*/i, '').trim().split(/\s+/).filter(p => /[\p{L}\d]/u.test(p)).slice(0, 2).map(p => (p.match(/[\p{L}\d]/u) || [''])[0]).join('').toUpperCase();
   return `<span class="avatar" style="background:var(${f});color:var(${c})">${esc(iniciais || '•')}</span>`;
 }
 const linhaTransacao = l => `<li class="linha">${avatar(l.descricao, l.categoria)}<div class="corpo"><b>${esc(l.descricao)}</b><small>${fmtData(l.vencimento)} · ${esc(l.categoria || 'Sem categoria')}</small></div>
@@ -580,13 +615,7 @@ const TELA = {
           ${metrica('Recebido do contratado', `${moedaCurta(n.receita)} de ${moedaCurta(contratada)}`, recebidoDoContratado)}</section>
       </div>
       <div class="grade duas bloco-espaco">
-        <section class="cartao"><h2>Clientes ativos <small><button class="btn pequeno" data-acao="ir" data-valor="clientes">Ver todos</button></small></h2>
-          ${lista(abertos, c => {
-            const dias = c.ultimo_contato ? diasEntre(c.ultimo_contato, d) : null;
-            return `<li class="linha clicavel" data-acao="abrir-cliente" data-id="${c.id}">${avatar(c.nome, c.nome)}<div class="corpo"><b>${esc(c.nome)}</b>
-              <small class="${dias === null || dias > DIAS_SEM_CONTATO ? 'alerta' : ''}">${dias === null ? 'Contato não registrado' : `Último contato há ${dias} dias`}</small></div>
-              <span class="valor">${moeda(c.valor_mensal)}</span></li>`;
-          }, 'Nenhum cliente ativo.')}</section>
+        ${cartaoCompromissos('empresa', m)}
         <div class="grade">
           <section class="cartao"><h2>Para onde foram os custos <small>${moedaCurta(n.custo)}</small></h2>
             ${n.custosItens.length ? rosca(porCategoria(n.custosItens), moedaCurta(n.custo), 'custos', moedaCurta) : '<p class="vazio">Sem custos neste mês.</p>'}</section>
@@ -633,7 +662,8 @@ const TELA = {
         <section class="cartao"><h2>Últimas transações <small><button class="btn pequeno" data-acao="ir" data-valor="lancamentos" data-filtro="pessoal">Ver todas</button></small></h2>
           ${lista(ultimos, linhaTransacao, 'Nenhuma transação.')}</section>
         <section class="cartao"><h2>Tarefas pessoais <small>${tarefas.length}</small></h2>${lista(tarefas.slice(0, 8), t => linhaTarefa(t), 'Nenhuma tarefa pessoal.')}</section>
-      </div>`;
+      </div>
+      <div class="grade duas bloco-espaco">${cartaoCompromissos('pessoal', m)}</div>`;
   },
 
   /* ---------- Lançamentos: todos os dados ---------- */
@@ -718,34 +748,56 @@ const TELA = {
     const pagos = contratos.filter(k => k.situacao.chave === 'pago').length;
     const terminando = contratos.filter(k => k.fim && diasEntre(hoje(), k.fim) <= 60).sort((a, b) => a.fim.localeCompare(b.fim));
     const maior = contratos[0];
-    const receitaMeses = ultimosMeses(m, 6).map(mm => ({ rotulo: rotuloMes(mm).slice(0, 3), valor: somaV(dados.lancamentos.filter(l => l.vencimento.slice(0, 7) === mm && ehReceitaCliente(l))), destaque: mm === m }));
-    const outros = dados.clientes.filter(c => !clienteAberto(c) && (ui.statusCliente === 'todos' || ui.statusCliente === 'abertos' ? c.status !== 'ativo' : c.status === ui.statusCliente))
-      .sort((a, b) => a.nome.localeCompare(b.nome));
+    // Recebido por mês, separado por cliente (PJ + Pix pessoal)
+    const meses = ultimosMeses(m, 6);
+    const somaPor = {};
+    const porMes = meses.map(mm => {
+      const partes = {};
+      dados.lancamentos.filter(l => l.vencimento.slice(0, 7) === mm && ehReceitaCliente(l)).forEach(l => {
+        const c = clienteDoLancamento(l); const k = c ? nomeCurto(c) : /Uniao Este/i.test(l.descricao) ? 'Associação União Este' : 'Outros';
+        partes[k] = (partes[k] || 0) + Number(l.valor); somaPor[k] = (somaPor[k] || 0) + Number(l.valor);
+      });
+      return { rotulo: rotuloMes(mm), destaque: mm === m, partes };
+    });
+    const series = Object.keys(somaPor).sort((a, b) => (a === 'Outros') - (b === 'Outros') || /Associação/.test(a) - /Associação/.test(b) || somaPor[b] - somaPor[a]).map(k => ({ chave: k, rotulo: k }));
+    const total6 = Object.values(somaPor).reduce((s, v) => s + v, 0);
+    const pessoal6 = somaV(dados.lancamentos.filter(l => meses.includes(l.vencimento.slice(0, 7)) && ehClienteNoPessoal(l)));
+    const outros = dados.clientes.filter(c => !clienteAberto(c) && (ui.statusCliente === 'abertos' || ui.statusCliente === 'todos' || c.status === ui.statusCliente)).sort((a, b) => a.nome.localeCompare(b.nome));
     const pil = (v, r) => `<button class="pilula" data-acao="status-cliente" data-valor="${v}" aria-pressed="${ui.statusCliente === v || (v === 'todos' && ui.statusCliente === 'abertos')}">${esc(r)}</button>`;
     return topo('Clientes', `${contratos.length} contratos ativos · ${abertos.length} unidades atendidas`, botaoNovo('clientes', 'Novo cliente')) + `
       <div class="grade kpis">
         ${kpi('Receita contratada', moeda(receita), `${contratos.length} contratos por mês`, 'destaque', 'carteira')}
-        ${kpi('Recebido em ' + rotuloMes(m).toLowerCase(), moeda(recebido), `${pagos} de ${contratos.length} contratos já pagaram`, '', 'feito')}
-        ${kpi('Contratos terminando', String(terminando.length), terminando[0] ? `${terminando[0].nome.split(' (')[0]} em ${fmtData(terminando[0].fim)}` : 'Nada nos próximos 60 dias', '', 'alerta')}
+        ${kpi('Recebido em ' + rotuloMes(m), moeda(recebido), `${pagos} de ${contratos.length} contratos já pagaram`, '', 'feito')}
+        ${kpi('Contratos terminando', String(terminando.length), terminando[0] ? `${terminando[0].nome} em ${fmtData(terminando[0].fim)}` : 'Nada nos próximos 60 dias', '', 'alerta')}
         ${kpi('Maior cliente', maior ? Math.round(maior.valor / (receita || 1) * 100) + '%' : '—', maior ? maior.nome + ' da receita' : '', '', 'subir')}
       </div>
-      <div class="grade painel-clientes bloco-espaco">
-        <section class="cartao"><h2>Contratos ativos <small>situação de ${rotuloMes(m).toLowerCase()}</small></h2>
-          ${contratos.length ? `<div class="contratos">${contratos.map(cartaoContrato).join('')}</div>` : '<p class="vazio">Nenhum cliente ativo. Cadastre o primeiro.</p>'}
+      <section class="cartao bloco-espaco"><h2>Recebido de clientes <small>${moedaCurta(total6)} em 6 meses · ${moedaCurta(pessoal6)} caiu no Pix pessoal</small></h2>
+        ${barrasEmpilhadas(porMes, series)}
+        <p class="nota">Soma o que entrou na conta PJ e o que clientes pagaram no seu Pix pessoal (Nelson e a oficina). "Associação União Este" junta pagamentos antigos da associação (Elison, Giuseppe e outros) que não dá para separar pelo nome.</p>
+      </section>
+      <section class="cartao bloco-espaco"><h2>Clientes ativos <small>situação de ${rotuloMes(m)}</small></h2>
+        <div class="tabela-rolagem"><table class="tabela-clientes">
+          <thead><tr><th>Cliente</th><th>Recebe em</th><th class="num">Por mês</th><th class="num">Recebido em ${rotuloMes(m)}</th><th>Situação</th><th>Contrato até</th></tr></thead>
+          <tbody>${contratos.map(k => `<tr class="clicavel" data-acao="abrir-cliente" data-id="${k.id}" role="button" tabindex="0">
+            <td><div class="cel-cliente">${avatar(k.nome, k.nome)}<div><b>${esc(k.nome)}</b>${k.unidades.length > 1 ? `<small>${k.unidades.length} unidades</small>` : ''}</div></div></td>
+            <td><span class="selo ${k.conta === 'Pix pessoal' ? 'ambar' : ''}">${esc(k.conta)}</span></td>
+            <td class="num">${moeda(k.valor)}</td>
+            <td class="num">${k.recebidoMes ? moeda(k.recebidoMes) : '—'}</td>
+            <td><span class="selo ${k.situacao.cor}">${esc(k.situacao.texto.replace(/ · .*/, ''))}</span></td>
+            <td>${k.fim ? `<span class="${diasEntre(hoje(), k.fim) <= 30 ? 'alerta' : ''}">${fmtData(k.fim, { day: '2-digit', month: '2-digit', year: '2-digit' })}</span>` : '<span class="fraco">sem data</span>'}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </section>
+      <div class="grade duas">
+        <section class="cartao"><h2>De onde vem a receita <small>${moedaCurta(receita)}/mês</small></h2>
+          ${contratos.map((k, i) => `<div class="fatia-receita"><div class="rotulo"><span><i style="background:${CORES[i % CORES.length]}"></i>${esc(k.nome)}</span><b>${moedaCurta(k.valor)} · ${Math.round(k.valor / (receita || 1) * 100)}%</b></div>
+            <div class="progresso"><div style="width:${k.valor / (receita || 1) * 100}%;background:${CORES[i % CORES.length]}"></div></div></div>`).join('')}
         </section>
-        <div class="coluna-lateral">
-          <section class="cartao"><h2>De onde vem a receita <small>${moedaCurta(receita)}/mês</small></h2>
-            ${contratos.map((k, i) => `<div class="fatia-receita"><div class="rotulo"><span><i style="background:${CORES[i % CORES.length]}"></i>${esc(k.nome)}</span><b>${moedaCurta(k.valor)}</b></div>
-              <div class="progresso"><div style="width:${k.valor / (receita || 1) * 100}%;background:${CORES[i % CORES.length]}"></div></div><small>${Math.round(k.valor / (receita || 1) * 100)}% da receita</small></div>`).join('')}
-          </section>
-          <section class="cartao"><h2>Recebido de clientes <small>últimos 6 meses</small></h2>${barras(receitaMeses, moedaCurta)}</section>
-        </div>
-      </div>
-      <section class="cartao bloco-espaco"><h2>Outros clientes <small>pausados e encerrados</small></h2>
-        <div class="pilulas">${pil('todos', 'Todos')}${pil('pausado', 'Pausados')}${pil('encerrado', 'Encerrados')}</div>
-        ${lista(outros, c => `<li class="linha clicavel" data-acao="abrir-cliente" data-id="${c.id}" role="button" tabindex="0">${avatar(c.nome, c.nome)}<div class="corpo"><b>${esc(c.nome)}</b>
-          <small>${esc(STATUS_CLIENTE[c.status])}${c.notas ? ' · ' + esc(c.notas.split('\n')[0].slice(0, 90)) : ''}</small></div><span class="valor">${moeda(c.valor_mensal)}</span></li>`, 'Nenhum cliente aqui.')}
-      </section>`;
+        <section class="cartao"><h2>Outros clientes <small>pausados e encerrados</small></h2>
+          <div class="pilulas">${pil('todos', 'Todos')}${pil('pausado', 'Pausados')}${pil('encerrado', 'Encerrados')}</div>
+          ${lista(outros, c => `<li class="linha clicavel" data-acao="abrir-cliente" data-id="${c.id}" role="button" tabindex="0">${avatar(c.nome, c.nome)}<div class="corpo"><b>${esc(nomeCurto(c))}</b>
+            <small>${esc(STATUS_CLIENTE[c.status])}</small></div><span class="valor">${moeda(c.valor_mensal)}</span></li>`, 'Nenhum cliente aqui.')}
+        </section>
+      </div>`;
   },
 
   cliente() {
