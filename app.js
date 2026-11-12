@@ -33,11 +33,13 @@ const ICONES = {
   alerta: '<path d="M12 3 2.500 20h19L12 3Z"/><path d="M12 10v4M12 17v.5"/>',
   carteira: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/>',
   subir: '<path d="M4 17 10 11l4 4 6-7"/><path d="M15 8h5v5"/>',
-  descer: '<path d="M4 7l6 6 4-4 6 7"/><path d="M15 16h5v-5"/>'
+  descer: '<path d="M4 7l6 6 4-4 6 7"/><path d="M15 16h5v-5"/>',
+  historico: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
+  casa: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10M10 20v-6h4v6"/>'
 };
 // Menu em três frentes: o que é dos dois, a agência e a vida pessoal
 const MENU = [
-  ['Geral', [['geral', 'Visão geral'], ['semana', 'Semana'], ['tarefas', 'Tarefas']]],
+  ['Geral', [['geral', 'Visão geral'], ['historico', 'Histórico'], ['semana', 'Semana'], ['tarefas', 'Tarefas']]],
   ['Agência', [['agencia', 'Painel da agência'], ['clientes', 'Clientes'], ['prospeccao', 'Prospecção']]],
   ['Pessoal', [['pessoal', 'Painel pessoal']]],
   ['Dados', [['lancamentos', 'Lançamentos']]]
@@ -45,8 +47,8 @@ const MENU = [
 const MENU_CELULAR = [['geral', 'Geral'], ['agencia', 'Agência'], ['clientes', 'Clientes'], ['pessoal', 'Pessoal'], ['tarefas', 'Tarefas']];
 
 /* ---------- Estado ---------- */
-const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [], documentos: [], compromissos: [] };
-const ui = { tela: 'geral', filtroLanc: 'todos', diaPrioridade: 'hoje', frente: 'todas', escopo: 'empresa', mes: null, statusCliente: 'abertos', deslocamentoSemana: 0, clienteId: null, tipoDoc: 'contrato' };
+const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [], documentos: [], compromissos: [], imoveis: [] };
+const ui = { tela: 'geral', filtroLanc: 'todos', diaPrioridade: 'hoje', frente: 'todas', escopo: 'empresa', mes: null, statusCliente: 'abertos', deslocamentoSemana: 0, clienteId: null, tipoDoc: 'contrato', periodo: '12', visao: 'tudo' };
 const manipuladores = {};
 
 /* ---------- Utilidades ---------- */
@@ -162,6 +164,21 @@ const FORMULARIOS = {
     { n: 'categoria', r: 'Categoria' }, { n: 'forma', r: 'Como paga (cartão, Pix...)' },
     { n: 'notas', r: 'Notas', area: true, largo: true }
   ], antes: v => ({ ...v, ja_pago: v.ja_pago || 0 }) },
+  imoveis: { nome: 'imóvel', campos: () => [
+    { n: 'nome', r: 'Nome', largo: true, req: true },
+    { n: 'endereco', r: 'Endereço', largo: true },
+    { n: 'situacao', r: 'Situação', op: [['alugado', 'Alugado'], ['moradia', 'Moramos nele'], ['vazio', 'Vazio']] },
+    { n: 'mudanca_prevista', r: 'Mudança prevista', tipo: 'date' },
+    { n: 'inquilino', r: 'Inquilino(a)' }, { n: 'telefone', r: 'Telefone do inquilino', tipo: 'tel' },
+    { n: 'aluguel', r: 'Aluguel (R$)', tipo: 'number', num: true }, { n: 'dia_aluguel', r: 'Dia de cobrar o aluguel', tipo: 'number', num: true, min: 1, max: 31 },
+    { n: 'pagador_aluguel', r: 'Nome que aparece no Pix do aluguel', largo: true },
+    { n: 'prestacao', r: 'Prestação da Caixa (R$)', tipo: 'number', num: true }, { n: 'dia_prestacao', r: 'Dia da prestação', tipo: 'number', num: true, min: 1, max: 31 },
+    { n: 'condominio', r: 'Condomínio (R$)', tipo: 'number', num: true }, { n: 'dia_condominio', r: 'Vencimento do condomínio', tipo: 'number', num: true, min: 1, max: 31 },
+    { n: 'condominio_pago_por', r: 'Quem paga o condomínio', op: [['Inquilina', 'Inquilino(a)'], ['Nós', 'Nós']] },
+    { n: 'saldo_devedor', r: 'Saldo devedor (R$)', tipo: 'number', num: true }, { n: 'saldo_em', r: 'Saldo conferido em', tipo: 'date' },
+    { n: 'prazo_meses', r: 'Prazo total (meses)', tipo: 'number', num: true, min: 1 }, { n: 'meses_restantes', r: 'Meses restantes', tipo: 'number', num: true, min: 1 },
+    { n: 'notas', r: 'Notas', area: true, largo: true }
+  ], antes: v => ({ ...v, aluguel: v.aluguel || 0, prestacao: v.prestacao || 0, condominio: v.condominio || 0 }) },
   contas: { nome: 'conta', campos: () => [
     { n: 'nome', r: 'Nome da conta (ex.: Nubank PJ)', largo: true, req: true },
     { n: 'escopo', r: 'De quem é', op: opcoes(ESCOPOS) },
@@ -247,6 +264,52 @@ function cartaoCompromissos(escopo, m = hoje().slice(0, 7)) {
     ${itens.length ? `<ul class="lista compromissos">${itens.map(linha).join('')}</ul>` : '<p class="vazio">Nada cadastrado.</p>'}
     <h3 class="sub">Já comprometido nos próximos meses</h3><div class="barras-compromisso">${barras(proximos, v => (v / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil')}</div>
     <p>${botaoNovo('compromissos', 'Nova despesa ou parcela', JSON.stringify({ escopo, inicio: hoje() }))}</p></section>`;
+}
+
+/* ---------- Apartamento ---------- */
+const TIPOS_DOC = { contrato: 'Contrato', comprovante: 'Comprovante', outro: 'Outro' };
+const linhaDoc = d => `<li class="linha">${avatar(TIPOS_DOC[d.tipo], d.tipo)}<div class="corpo clicavel" data-acao="abrir-doc" data-id="${d.id}" role="button" tabindex="0"><b>${esc(d.nome)}</b>
+  <small>${esc(TIPOS_DOC[d.tipo])} · ${fmtData(d.data || d.criado_em.slice(0, 10))}</small></div>
+  <button class="btn pequeno" data-acao="abrir-doc" data-id="${d.id}">Abrir</button>
+  <button class="btn pequeno perigo" data-acao="apagar-doc" data-id="${d.id}">Apagar</button></li>`;
+const formDoc = (attr = '') => `<form class="enviar-doc" data-form="documento" ${attr}>
+  <select name="tipo" aria-label="Tipo de documento">${Object.entries(TIPOS_DOC).map(([v, r]) => `<option value="${v}" ${ui.tipoDoc === v ? 'selected' : ''}>${r}</option>`).join('')}</select>
+  <input type="file" name="arquivo" accept="application/pdf,image/*" required>
+  <button class="btn azul pequeno">Anexar</button></form>`;
+
+function cartaoImovel(m) {
+  const im = dados.imoveis[0];
+  if (!im) return '';
+  const doMes = cat => dados.lancamentos.filter(l => l.vencimento.slice(0, 7) === m && l.categoria === cat);
+  const alug = doMes('Aluguel do apartamento').filter(l => l.tipo === 'entrada'), prest = doMes('Financiamento do apartamento (Caixa)').filter(l => l.tipo === 'saida');
+  const mesCorrente = m === hoje().slice(0, 7), dia = Number(hoje().slice(8, 10));
+  const situacao = (itens, diaVenc, feito, falta) => itens.length ? `<span class="selo verde">${feito} ${fmtData(itens[0].vencimento)}</span>`
+    : mesCorrente && diaVenc && dia < diaVenc ? `<span class="selo">Dia ${diaVenc}</span>` : `<span class="selo ambar">${falta}</span>`;
+  const alugado = im.situacao === 'alugado';
+  const pagas = im.prazo_meses && im.meses_restantes ? im.prazo_meses - im.meses_restantes : 0;
+  const condNosso = !alugado || im.condominio_pago_por === 'Nós';
+  const sobra = (alugado ? Number(im.aluguel) : 0) - Number(im.prestacao) - (condNosso ? Number(im.condominio) : 0);
+  const custoMorando = Number(im.prestacao) + Number(im.condominio);
+  const tel = (im.telefone || '').replace(/\D/g, '');
+  const docs = dados.documentos.filter(d => d.imovel_id === im.id).sort((a, b) => (b.data || b.criado_em).localeCompare(a.data || a.criado_em));
+  const serie = ultimosMeses(m).map(x => ({ rotulo: rotuloMes(x),
+    entrada: somaV(dados.lancamentos.filter(l => l.vencimento.slice(0, 7) === x && l.tipo === 'entrada' && l.categoria === 'Aluguel do apartamento')),
+    saida: somaV(dados.lancamentos.filter(l => l.vencimento.slice(0, 7) === x && l.tipo === 'saida' && l.categoria === 'Financiamento do apartamento (Caixa)')) }));
+  const linha = (rot, sub, valor, sinal, selo) => `<li class="linha"><div class="corpo"><b>${esc(rot)}</b><small>${esc(sub)}</small></div>${selo}<span class="valor ${sinal === '+' ? 'positivo' : ''}">${sinal} ${moeda(valor)}</span></li>`;
+  return `<section class="cartao"><h2>Apartamento <small><button class="btn pequeno" data-acao="editar" data-tabela="imoveis" data-id="${im.id}">Editar</button></small></h2>
+    <p class="nota">${esc(im.nome)} · ${alugado ? 'Alugado' + (im.inquilino ? ' para ' + esc(im.inquilino) : '') : im.situacao === 'moradia' ? 'Vocês moram nele' : 'Vazio'}${tel && alugado ? ` · <a href="https://wa.me/${tel}" target="_blank" rel="noopener">WhatsApp ${esc(im.telefone)}</a>` : ''}</p>
+    <ul class="lista">
+      ${alugado ? linha('Aluguel', `Cobrar todo dia ${im.dia_aluguel || '?'}`, im.aluguel, '+', situacao(alug, im.dia_aluguel, 'Recebido', 'Não recebido')) : ''}
+      ${linha('Prestação da Caixa', `Todo dia ${im.dia_prestacao || '?'}`, prest[0]?.valor || im.prestacao, '−', situacao(prest, im.dia_prestacao, 'Paga', 'Não paga'))}
+      ${linha('Condomínio', `Vence dia ${im.dia_condominio || '?'}`, im.condominio, condNosso ? '−' : '', condNosso ? '' : '<span class="selo">Inquilina paga</span>')}
+    </ul>
+    ${metrica(sobra >= 0 ? 'Sobra por mês (aluguel − prestação)' : 'Custo do apartamento por mês', (sobra >= 0 ? '+ ' : '− ') + moeda(Math.abs(sobra)), 1, sobra >= 0 ? 'verde' : 'saida')}
+    ${pagas ? metrica(`Financiamento: ${pagas} de ${im.prazo_meses} pagas`, `falta ${moedaCurta(im.saldo_devedor || 0)}`, pagas / im.prazo_meses) : ''}
+    ${alugado ? `<div class="aviso-mudanca"><b>Quando vocês se mudarem${im.mudanca_prevista ? ' (' + fmtData(im.mudanca_prevista, { month: 'long', year: 'numeric' }) + ')' : ' (2027, mês a definir)'}</b>
+      <span>O aluguel de ${moeda(im.aluguel)} para e o condomínio passa a ser de vocês. A casa vai custar ${moeda(custoMorando)} por mês (prestação + condomínio): ${moeda(Number(im.aluguel) + Number(im.condominio))} a menos no mês em relação a hoje.</span></div>` : ''}
+    <h3 class="sub">Aluguel x prestação <small>últimos 6 meses</small></h3>${barrasDuplas(serie)}${legendaDupla('Aluguel recebido', 'Prestação paga')}
+    <h3 class="sub">Documentos</h3>${formDoc(`data-imovel="${im.id}"`)}${lista(docs, linhaDoc, 'Nenhum documento ainda.')}
+  </section>`;
 }
 
 // Barras empilhadas: meses [{rotulo, destaque, partes: {chave: valor}}], series [{chave, rotulo}]
@@ -563,7 +626,7 @@ const TELA = {
         ${kpi('Patrimônio', moedaCurta(pat.total), 'Contas, caixinhas e ETFs', '', 'subir')}
       </div>
       <div class="grade painel bloco-espaco">
-        <section class="cartao"><h2>Resultado mês a mês <small>agência + pessoal, últimos 6 meses</small></h2>
+        <section class="cartao"><h2>Resultado mês a mês <small><button class="btn pequeno" data-acao="ir" data-valor="historico">Ver histórico</button></small></h2>
           ${area(ultimosMeses(m).map(x => ({ rotulo: rotuloMes(x), valor: numeros(x).resultado })))}</section>
         <section class="cartao"><h2>${esc(nomeMes(d.slice(0, 7)))} <small>${eventos.length} compromisso(s)</small></h2>
           ${calendario(d.slice(0, 7))}
@@ -589,6 +652,62 @@ const TELA = {
             ], x => `<li class="linha clicavel" ${x.ir ? `data-acao="ir" data-valor="${x.ir}" data-filtro="classificar"` : `data-acao="editar" data-tabela="${x.t}" data-id="${x.id}"`}><div class="corpo"><b>${esc(x.n)}</b><small>${esc(x.s)}</small></div><span class="selo ${x.cor}">${x.selo}</span></li>`, 'Nada pendente.')}</section>
         </div>
       </div>`;
+  },
+
+  /* ---------- Histórico mês a mês ---------- */
+  historico() {
+    const atual = hoje().slice(0, 7);
+    // Começa no 1º mês com extrato de verdade (meses com 1 ou 2 lançamentos soltos ficam de fora)
+    const porMes = {}; dados.lancamentos.forEach(l => { const x = l.vencimento.slice(0, 7); porMes[x] = (porMes[x] || 0) + 1; });
+    const primeiro = Object.keys(porMes).filter(x => x <= atual && porMes[x] >= 10).sort()[0] || atual;
+    let meses = []; for (let x = primeiro; x <= atual; x = somarMes(x, 1)) meses.push(x);
+    const p = ui.periodo;
+    meses = p === 'ano' ? meses.filter(x => x.slice(0, 4) === atual.slice(0, 4)) : p === 'tudo' ? meses : meses.slice(-Number(p));
+    const v = ui.visao;
+    const COL = {
+      tudo: { titulo: 'Resultado', principal: k => k.resultado, ent: k => k.receita + k.outras, sai: k => k.custo + k.gastos,
+        cols: [['Receita agência', k => k.receita, '+'], ['Custos agência', k => k.custo, '−'], ['Outras entradas', k => k.outras, '+'], ['Gastos pessoais', k => k.gastos, '−']] },
+      agencia: { titulo: 'Lucro', principal: k => k.lucro, ent: k => k.receita, sai: k => k.custo,
+        cols: [['Receita', k => k.receita, '+'], ['Custos', k => k.custo, '−'], ['Margem', k => k.receita ? k.lucro / k.receita : 0, '%']] },
+      pessoal: { titulo: 'Sobrou', principal: k => k.retirada + k.pessoalPJ + k.outras - k.gastos, ent: k => k.retirada + k.pessoalPJ + k.outras, sai: k => k.gastos,
+        cols: [['Entrou', k => k.retirada + k.pessoalPJ + k.outras, '+'], ['Gastou', k => k.gastos, '−']] }
+    }[v];
+    const linhas = meses.map(x => { const k = numeros(x); return { m: x, k, valor: COL.principal(k) }; });
+    const fechados = linhas.filter(l => l.m !== atual);
+    const base = fechados.length ? fechados : linhas;
+    const total = linhas.reduce((s, l) => s + l.valor, 0);
+    const media = base.reduce((s, l) => s + l.valor, 0) / (base.length || 1);
+    const melhor = base.reduce((a, b) => b.valor > a.valor ? b : a, base[0]);
+    const pior = base.reduce((a, b) => b.valor < a.valor ? b : a, base[0]);
+    const sinal = x => (x < 0 ? '− ' : '+ ') + moeda(Math.abs(x));
+    const fmtCol = (tipo, x) => tipo === '%' ? Math.round(x * 100) + '%' : moeda(x);
+    const pil = (acao, val, rot, atualV) => `<button class="pilula" data-acao="${acao}" data-valor="${val}" aria-pressed="${atualV === val}">${esc(rot)}</button>`;
+    const nomeM = x => `${rotuloMes(x)}/${x.slice(2, 4)}`;
+    return topo('Histórico', 'Como cada mês fechou. Clique num mês para ver os detalhes.') + `
+      <div class="filtros-historico">
+        <div class="pilulas">${pil('visao', 'tudo', 'Tudo', v)}${pil('visao', 'agencia', 'Agência', v)}${pil('visao', 'pessoal', 'Pessoal', v)}</div>
+        <div class="pilulas">${pil('periodo', '6', '6 meses', p)}${pil('periodo', '12', '12 meses', p)}${pil('periodo', 'ano', 'Este ano', p)}${pil('periodo', 'tudo', 'Desde o início', p)}</div>
+      </div>
+      <div class="grade kpis">
+        ${kpi(`${COL.titulo} no período`, sinal(total), `${linhas.length} mês(es)${linhas.some(l => l.m === atual) ? ', com o mês atual' : ''}`, 'destaque', 'carteira')}
+        ${kpi('Média por mês', sinal(media), fechados.length ? 'Só meses fechados' : 'Mês em andamento', '', 'historico')}
+        ${kpi('Melhor mês', melhor ? nomeM(melhor.m) : '—', melhor ? sinal(melhor.valor) : '', '', 'subir')}
+        ${kpi('Pior mês', pior ? nomeM(pior.m) : '—', pior ? sinal(pior.valor) : '', '', 'descer')}
+      </div>
+      <div class="grade duas bloco-espaco">
+        <section class="cartao"><h2>${COL.titulo} mês a mês</h2>${area(linhas.map(l => ({ rotulo: rotuloMes(l.m), valor: l.valor })))}</section>
+        <section class="cartao"><h2>Entradas x saídas</h2>${barrasDuplas(linhas.map(l => ({ rotulo: rotuloMes(l.m), entrada: COL.ent(l.k), saida: COL.sai(l.k) })))}${legendaDupla('Entradas', 'Saídas')}</section>
+      </div>
+      <section class="cartao"><h2>Mês a mês</h2>
+        <div class="tabela-rolagem"><table class="tabela-clientes tabela-historico">
+          <thead><tr><th>Mês</th>${COL.cols.map(c => `<th class="num">${esc(c[0])}</th>`).join('')}<th class="num">${COL.titulo}</th></tr></thead>
+          <tbody>${linhas.slice().reverse().map(l => `<tr class="clicavel" data-acao="abrir-mes" data-valor="${l.m}" role="button" tabindex="0">
+            <td><b>${esc(nomeM(l.m))}</b>${l.m === atual ? ' <small class="fraco">até hoje</small>' : ''}</td>
+            ${COL.cols.map(c => `<td class="num">${fmtCol(c[2], c[1](l.k))}</td>`).join('')}
+            <td class="num"><b class="${l.valor < 0 ? 'negativo' : 'positivo'}">${sinal(l.valor)}</b></td></tr>`).join('')}</tbody>
+          <tfoot><tr><td><b>Total</b></td>${COL.cols.map(c => `<td class="num">${c[2] === '%' ? '' : moeda(linhas.reduce((s, l) => s + c[1](l.k), 0))}</td>`).join('')}<td class="num"><b class="${total < 0 ? 'negativo' : 'positivo'}">${sinal(total)}</b></td></tr></tfoot>
+        </table></div>
+      </section>`;
   },
 
   /* ---------- Agência ---------- */
@@ -663,7 +782,7 @@ const TELA = {
           ${lista(ultimos, linhaTransacao, 'Nenhuma transação.')}</section>
         <section class="cartao"><h2>Tarefas pessoais <small>${tarefas.length}</small></h2>${lista(tarefas.slice(0, 8), t => linhaTarefa(t), 'Nenhuma tarefa pessoal.')}</section>
       </div>
-      <div class="grade duas bloco-espaco">${cartaoCompromissos('pessoal', m)}</div>`;
+      <div class="grade duas bloco-espaco">${cartaoCompromissos('pessoal', m)}${cartaoImovel(m)}</div>`;
   },
 
   /* ---------- Lançamentos: todos os dados ---------- */
@@ -809,11 +928,6 @@ const TELA = {
     const docs = dados.documentos.filter(d => d.cliente_id === c.id).sort((a, b) => (b.data || b.criado_em).localeCompare(a.data || a.criado_em));
     const tarefas = dados.tarefas.filter(t => t.cliente_id === c.id && t.status !== 'feita');
     const cor = c.status === 'em_risco' ? 'vermelho' : c.status === 'ativo' ? 'azul' : '';
-    const TIPOS_DOC = { contrato: 'Contrato', comprovante: 'Comprovante', outro: 'Outro' };
-    const linhaDoc = d => `<li class="linha">${avatar(TIPOS_DOC[d.tipo], d.tipo)}<div class="corpo clicavel" data-acao="abrir-doc" data-id="${d.id}" role="button" tabindex="0"><b>${esc(d.nome)}</b>
-      <small>${esc(TIPOS_DOC[d.tipo])} · ${fmtData(d.data || d.criado_em.slice(0, 10))}</small></div>
-      <button class="btn pequeno" data-acao="abrir-doc" data-id="${d.id}">Abrir</button>
-      <button class="btn pequeno perigo" data-acao="apagar-doc" data-id="${d.id}">Apagar</button></li>`;
     const info = [['Contato', c.contato], ['Telefone', c.telefone], ['Serviços', c.servicos], ['Vencimento', c.dia_vencimento ? 'Todo dia ' + c.dia_vencimento : ''],
       ['Contrato', c.contrato_inicio || c.contrato_fim ? `${c.contrato_inicio ? fmtData(c.contrato_inicio, { day: '2-digit', month: '2-digit', year: 'numeric' }) : '?'} a ${c.contrato_fim ? fmtData(c.contrato_fim, { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'sem data'}` : ''], ['Grupo', c.grupo],
       ['Próxima ação', c.proxima_acao ? c.proxima_acao + (c.proxima_acao_em ? ' em ' + fmtData(c.proxima_acao_em) : '') : '']].filter(x => x[1]);
@@ -836,11 +950,7 @@ const TELA = {
       </div>
       <div class="bloco-espaco">
         <section class="cartao"><h2>Documentos</h2>
-          <form class="enviar-doc" data-form="documento">
-            <select name="tipo" aria-label="Tipo de documento">${Object.entries(TIPOS_DOC).map(([v, r]) => `<option value="${v}" ${ui.tipoDoc === v ? 'selected' : ''}>${r}</option>`).join('')}</select>
-            <input type="file" name="arquivo" accept="application/pdf,image/*" required>
-            <button class="btn azul pequeno">Anexar</button>
-          </form>
+          ${formDoc()}
           ${lista(docs, linhaDoc, 'Nenhum documento ainda. Anexe o contrato e os comprovantes.')}
         </section>
       </div>
@@ -916,6 +1026,9 @@ Object.assign(manipuladores, {
   'dia-prioridade': b => { ui.diaPrioridade = b.dataset.valor; desenhar(); },
   frente: b => { ui.frente = b.dataset.valor; desenhar(); },
   escopo: b => { ui.escopo = b.dataset.valor; desenhar(); },
+  visao: b => { ui.visao = b.dataset.valor; desenhar(); },
+  periodo: b => { ui.periodo = b.dataset.valor; desenhar(); },
+  'abrir-mes': b => { ui.mes = b.dataset.valor; ui.tela = ui.visao === 'tudo' ? 'geral' : ui.visao; desenhar(); window.scrollTo(0, 0); },
   'status-cliente': b => { ui.statusCliente = b.dataset.valor; desenhar(); },
   mes: b => { ui.mes = somarMes(ui.mes || hoje().slice(0, 7), Number(b.dataset.valor)); desenhar(); },
   semana: b => { ui.deslocamentoSemana = Number(b.dataset.valor) === 0 ? 0 : ui.deslocamentoSemana + Number(b.dataset.valor); desenhar(); },
@@ -976,10 +1089,11 @@ async function enviarDocumento(form) {
   const botao = form.querySelector('button'); botao.disabled = true; botao.textContent = 'Enviando...';
   ui.tipoDoc = form.tipo.value;
   const limpo = arquivo.name.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.\-]+/g, '_');
-  const caminho = `${ui.clienteId}/${Date.now()}-${limpo}`;
+  const imovel = form.dataset.imovel || null;
+  const caminho = `${imovel ? 'imoveis/' + imovel : ui.clienteId}/${Date.now()}-${limpo}`;
   const { error } = await banco.storage.from('documentos').upload(caminho, arquivo, { contentType: arquivo.type || 'application/octet-stream' });
   if (error) { avisar('Não consegui enviar: ' + error.message, true); botao.disabled = false; botao.textContent = 'Anexar'; return; }
-  if (await gravar('documentos', { cliente_id: ui.clienteId, tipo: form.tipo.value, nome: arquivo.name.replace(/\.[^.]+$/, ''), caminho, data: hoje() })) avisar('Documento anexado.');
+  if (await gravar('documentos', { cliente_id: imovel ? null : ui.clienteId, imovel_id: imovel, tipo: form.tipo.value, nome: arquivo.name.replace(/\.[^.]+$/, ''), caminho, data: hoje() })) avisar('Documento anexado.');
 }
 
 $('form-login').onsubmit = async e => {
