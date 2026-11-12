@@ -272,3 +272,31 @@ dialog h2 { font-size: 18px; }
 .ficha dd { margin: 0; overflow-wrap: anywhere; }
 .notas-cliente { white-space: pre-wrap; font-size: 13.5px; line-height: 1.55; color: var(--suave); background: var(--superficie-2); border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; }
 @media (max-width: 760px) { .ficha { grid-template-columns: 1fr; gap: 2px; } .ficha dd { margin-bottom: 8px; } }
+
+/* Tela de clientes: contratos */
+.grade.painel-clientes { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); align-items: start; }
+.coluna-lateral { display: grid; gap: 18px; min-width: 0; }
+.contratos { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.contrato { border: 1px solid var(--borda); border-radius: 18px; padding: 16px; display: grid; gap: 10px; align-content: start; background: var(--superficie); transition: border-color .15s, box-shadow .15s; min-width: 0; }
+.contrato:hover { border-color: var(--acento); box-shadow: var(--sombra); }
+.contrato-topo { display: flex; align-items: center; gap: 12px; cursor: pointer; min-width: 0; }
+.contrato-topo .corpo { flex: 1; min-width: 0; }
+.contrato-topo .corpo b { display: block; font-weight: 650; line-height: 1.25; overflow-wrap: anywhere; }
+.contrato-topo .corpo small { color: var(--suave); font-size: 12.5px; }
+.contrato-valor { text-align: right; white-space: nowrap; }
+.contrato-valor strong { display: block; font-size: 17px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.contrato-valor small { color: var(--suave); font-size: 11.5px; }
+.contrato > .selo { justify-self: start; white-space: normal; }
+.contrato .prazo { display: grid; gap: 5px; }
+.contrato .prazo small, small.prazo, .contrato-extras { color: var(--suave); font-size: 12.5px; }
+.progresso.alerta > div { background: var(--c-ambar); }
+.unidades { display: flex; flex-wrap: wrap; gap: 6px; }
+.unidades .pilula { padding: 4px 10px; font-size: 12px; }
+.fatia-receita { display: grid; gap: 5px; padding: 8px 0; }
+.fatia-receita .rotulo { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.fatia-receita .rotulo span { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.fatia-receita .rotulo i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.fatia-receita small { color: var(--suave); font-size: 12px; }
+@media (max-width: 1240px) { .grade.painel-clientes { grid-template-columns: 1fr; } .coluna-lateral { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .coluna-lateral { grid-template-columns: 1fr; } .contratos { grid-template-columns: 1fr; } }
+.fatia-receita .rotulo b { white-space: nowrap; }
