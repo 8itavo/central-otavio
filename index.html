@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#eef0f6">
+<script>
+  // Tema escolhido fica salvo neste aparelho; o padrão é o claro
+  try { if (localStorage.getItem('tema') === 'escuro') document.documentElement.dataset.theme = 'dark'; } catch (e) {}
+</script>
+<title>Central do Otávio</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="estilo.css?v=12">
+</head>
+<body>
+<div id="login" hidden>
+  <form id="form-login">
+    <div class="marca"><i>C</i> Central do Otávio</div>
+    <label class="campo">Email<input id="email" type="email" autocomplete="username" required></label>
+    <label class="campo">Senha<input id="senha" type="password" autocomplete="current-password" required></label>
+    <button class="btn azul">Entrar</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <aside class="lateral">
+    <div class="marca"><i>C</i> Central</div>
+    <div id="nav-lateral"></div>
+    <div class="rodape-menu">
+      <button class="nav-item" data-acao="tema" id="botao-tema"></button>
+      <button class="nav-item" data-acao="sair"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H4"/></svg><span>Sair</span></button>
+    </div>
+  </aside>
+  <main class="principal" id="tela"></main>
+  <nav class="nav-baixo" id="nav-baixo" aria-label="Navegação"></nav>
+</div>
+
+<dialog id="dialogo"></dialog>
+<div id="mensagem" role="status" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="app.js?v=12"></script>
+</body>
+</html>
