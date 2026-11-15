@@ -56,7 +56,7 @@ const GASTOS_PESSOAIS = [
   ['Saúde e cuidados', ['Farmácia', 'Saúde e consultas', 'Cuidados pessoais', 'Jiu-jitsu']],
   ['Lazer e compras', ['Lazer e passeios', 'Compras online', 'Roupas', 'Compras (joias)', 'Presentes']],
   ['Trabalho e estudo', ['Assinaturas', 'Ferramentas de trabalho (uso pessoal e empresa)', 'Cursos e mentorias', 'Equipamentos e manutenção']],
-  ['Pessoas e compromissos', ['Família', 'Casamento', 'Dízimo e ofertas', 'Empréstimo ao Samuel', 'Pet']],
+  ['Pessoas e compromissos', ['Família', 'Luísa (noiva)', 'Casamento', 'Dízimo e ofertas', 'Empréstimo ao Samuel', 'Pet']],
   ['Outros', ['Outros gastos', 'Não identificado']]
 ];
 const CATEGORIAS = {
