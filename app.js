@@ -594,7 +594,7 @@ function numeros(m, ateDia = null) {
   const gastosItens = [...L.filter(l => l.escopo === 'pessoal' && l.tipo === 'saida'), ...pessoalPJItens];
   const custo = somaV(custosItens), reembolsoV = somaV(reembolsos);
   const gastos = somaV(gastosItens) - reembolsoV;
-  const outras = somaV(L.filter(l => l.escopo === 'pessoal' && l.tipo === 'entrada' && !ehRetirada(l) && !ehClienteNoPessoal(l) && !ehReembolso(l)));
+  const outras = somaV(L.filter(l => l.escopo === 'pessoal' && l.tipo === 'entrada' && !ehRetirada(l) && !ehClienteNoPessoal(l) && !ehReembolso(l) && !ehEmprestimoDevolvido(l)));
   const retirada = somaV(L.filter(l => l.escopo === 'pessoal' && l.tipo === 'entrada' && ehRetirada(l)));
   return { L, receita, custo, lucro: receita - custo, outras, retirada, pessoalPJ: somaV(pessoalPJItens), gastos, reembolsos, reembolsoV,
     resultado: receita - custo + outras - gastos, custosItens, gastosItens };
