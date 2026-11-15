@@ -64,6 +64,7 @@ const CATEGORIAS = {
     saida: GASTOS_PESSOAIS,
     entrada: [
       ['Entradas', ['Retirada da empresa', 'Cliente da agência (pago no pessoal)', 'Aluguel do apartamento', 'Família', 'Trabalhos extras', 'Outras entradas', 'Descontos no cartão']],
+      ['Não é renda', ['Empréstimo devolvido']],
       ['Devolução de um gasto (desconta do gasto)', [...new Set(GASTOS_PESSOAIS.flatMap(g => g[1]).filter(c => c !== 'Família' && c !== 'Não identificado'))]]
     ]
   },
@@ -577,6 +578,7 @@ const somaV = itens => itens.reduce((s, l) => s + Number(l.valor), 0);
 const tipoConta = c => /^Cartão/i.test(c.nome) ? 'cartao' : /^(Caixinha|ETF|Investimento)/i.test(c.nome) ? 'investimento' : 'conta';
 const ehRetirada = l => /^Retirada/.test(l.categoria || '');
 const ehPessoalPeloPJ = l => l.escopo === 'empresa' && l.tipo === 'saida' && /^Pessoal pago pela empresa/.test(l.categoria || '');
+const ehEmprestimoDevolvido = l => l.tipo === 'entrada' && /^Empréstimo devolvido/.test(l.categoria || '');
 const ehClienteNoPessoal = l => l.escopo === 'pessoal' && l.tipo === 'entrada' && /^Cliente da agência/.test(l.categoria || '');
 
 // Agência = receita do PJ + clientes que pagam no pessoal − custos do PJ (sem retirada e sem gasto pessoal pago pelo PJ).
