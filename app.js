@@ -47,8 +47,51 @@ const MENU = [
 ];
 const MENU_CELULAR = [['geral', 'Geral'], ['agencia', 'Agência'], ['clientes', 'Clientes'], ['pessoal', 'Pessoal'], ['mapas', 'Mapas'], ['tarefas', 'Tarefas']];
 
+/* ---------- Categorias (lista fixa, em grupos) ---------- */
+// Os nomes batem com os de Geral/Finanças/regras.csv. Para criar uma categoria nova, acrescente aqui.
+const GASTOS_PESSOAIS = [
+  ['Casa', ['Financiamento do apartamento (Caixa)', 'Energia elétrica', 'Água e gás', 'Celular e internet', 'Coisas para casa']],
+  ['Alimentação', ['Mercado e padaria', 'Alimentação fora de casa']],
+  ['Transporte', ['Combustível', 'Estacionamento', 'Transporte por app', 'Moto (manutenção)', 'Seguro (celular / moto)', 'Multas']],
+  ['Saúde e cuidados', ['Farmácia', 'Saúde e consultas', 'Cuidados pessoais', 'Jiu-jitsu']],
+  ['Lazer e compras', ['Lazer e passeios', 'Compras online', 'Roupas', 'Compras (joias)', 'Presentes']],
+  ['Trabalho e estudo', ['Assinaturas', 'Ferramentas de trabalho (uso pessoal e empresa)', 'Cursos e mentorias', 'Equipamentos e manutenção']],
+  ['Pessoas e compromissos', ['Família', 'Casamento', 'Dízimo e ofertas', 'Empréstimo ao Samuel', 'Pet']],
+  ['Outros', ['Outros gastos', 'Não identificado']]
+];
+const CATEGORIAS = {
+  pessoal: {
+    saida: GASTOS_PESSOAIS,
+    entrada: [
+      ['Entradas', ['Retirada da empresa', 'Cliente da agência (pago no pessoal)', 'Aluguel do apartamento', 'Família', 'Trabalhos extras', 'Outras entradas', 'Descontos no cartão']],
+      ['Devolução de um gasto (desconta do gasto)', [...new Set(GASTOS_PESSOAIS.flatMap(g => g[1]).filter(c => c !== 'Família' && c !== 'Não identificado'))]]
+    ]
+  },
+  empresa: {
+    saida: [
+      ['Equipe e terceiros', ['Equipe (Samuel)', 'Freelancers e terceiros']],
+      ['Ferramentas', ['Ferramentas e softwares', 'Assinaturas', 'Equipamentos e manutenção']],
+      ['Anúncios', ['Anúncios (tráfego próprio)', 'Repasse do Nelson: anúncios', 'Repasse do Nelson: ChatGPT']],
+      ['Impostos e banco', ['Impostos (DAS)', 'Tarifas e IOF']],
+      ['Estudo', ['Cursos e mentorias', 'MBA (Subido Pro)']],
+      ['Outros custos', ['Compras online', 'Alimentação fora de casa', 'Não identificado']],
+      ['Não é custo da agência', ['Retirada do sócio', 'Pessoal pago pela empresa (dízimo)', 'Pessoal pago pela empresa (luz de casa)', 'Pessoal pago pela empresa (gás de casa)', 'Pessoal pago pela empresa (outros)', 'Família']]
+    ],
+    entrada: [['Entradas', ['Receita de clientes', 'Outras entradas da empresa']]]
+  }
+};
+function opcoesCategoria(escopo, tipo, atual) {
+  const grupos = CATEGORIAS[escopo || 'pessoal'][tipo || 'saida'];
+  const todas = new Set(grupos.flatMap(g => g[1]));
+  const extra = atual && !todas.has(atual) ? `<option value="${esc(atual)}" selected>${esc(A_CLASSIFICAR.includes(atual) ? 'Escolha a categoria' : atual)}</option>` : (atual ? '' : '<option value="" selected>Escolha a categoria</option>');
+  return extra + grupos.map(([g, cs]) => `<optgroup label="${esc(g)}">${cs.map(c => `<option value="${esc(c)}" ${c === atual ? 'selected' : ''}>${esc(c)}</option>`).join('')}</optgroup>`).join('');
+}
+// Nome limpo de quem pagou ou recebeu (para as regras "sempre")
+const nomeDoLancamento = d => String(d || '').replace(/^(Pix para|Recebido de|Compra no débito -|Pagamento efetuado -|Transferência (enviada|recebida)( pelo Pix)? -)\s*/i, '')
+  .replace(/\s*\(.*\)\s*$/, '').replace(/^[\d.\s]+(?=\p{L})/u, '').replace(/\s+\d{11}$/, '').trim();
+
 /* ---------- Estado ---------- */
-const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [], documentos: [], compromissos: [], imoveis: [], mapas: [] };
+const dados = { tarefas: [], clientes: [], leads: [], contas: [], lancamentos: [], metas_semana: [], revisoes_semana: [], agenda_eventos: [], documentos: [], compromissos: [], imoveis: [], mapas: [], regras_categoria: [] };
 const ui = { tela: 'geral', filtroLanc: 'todos', diaPrioridade: 'hoje', frente: 'todas', escopo: 'empresa', mes: null, statusCliente: 'abertos', deslocamentoSemana: 0, clienteId: null, tipoDoc: 'contrato', periodo: '12', visao: 'tudo' };
 const manipuladores = {};
 
@@ -150,7 +193,7 @@ const FORMULARIOS = {
     { n: 'escopo', r: 'De quem é', op: opcoes(ESCOPOS) },
     { n: 'valor', r: 'Valor (R$)', tipo: 'number', num: true, req: true },
     { n: 'vencimento', r: 'Vencimento', tipo: 'date', req: true },
-    { n: 'categoria', r: 'Categoria' },
+    { n: 'categoria', r: 'Categoria', cat: true },
     { n: 'conta_id', r: 'Conta', op: opcoesContas() },
     { n: 'cliente_id', r: 'Cliente', op: opcoesClientes(), largo: true },
     { n: 'pago', r: 'Situação', op: [['false', 'Em aberto'], ['true', 'Pago / recebido']], bool: true, largo: true },
@@ -197,7 +240,8 @@ function abrirFormulario(tabela, id, padrao = {}) {
     const v = valores[c.n];
     const cls = c.largo ? ' largo' : '';
     let entrada;
-    if (c.op) entrada = `<select name="${c.n}">${c.op.map(([val, rot]) => `<option value="${esc(val)}" ${String(v ?? '') === String(val) ? 'selected' : ''}>${esc(rot)}</option>`).join('')}</select>`;
+    if (c.cat) entrada = `<select name="${c.n}">${opcoesCategoria(valores.escopo, valores.tipo, v)}</select>`;
+    else if (c.op) entrada = `<select name="${c.n}">${c.op.map(([val, rot]) => `<option value="${esc(val)}" ${String(v ?? '') === String(val) ? 'selected' : ''}>${esc(rot)}</option>`).join('')}</select>`;
     else if (c.area) entrada = `<textarea name="${c.n}">${esc(v)}</textarea>`;
     else {
       const extra = c.tipo === 'number' ? `step="${c.min ? 1 : '0.01'}" ${c.permiteNegativo ? '' : `min="${c.min ?? 0}"`} ${c.max ? `max="${c.max}"` : ''} inputmode="decimal"` : '';
@@ -215,6 +259,10 @@ function abrirFormulario(tabela, id, padrao = {}) {
       <button class="btn azul" value="salvar">Salvar</button>
     </div></form>`;
   const form = d.querySelector('form');
+  if (form.categoria && form.escopo && form.tipo) { // a lista de categorias acompanha "de quem é" e o tipo
+    const trocar = () => { form.categoria.innerHTML = opcoesCategoria(form.escopo.value, form.tipo.value, form.categoria.value); };
+    form.escopo.onchange = trocar; form.tipo.onchange = trocar;
+  }
   form.querySelector('[data-fechar]').onclick = () => d.close();
   const botaoApagar = form.querySelector('[data-apagar]');
   if (botaoApagar) botaoApagar.onclick = async () => {
@@ -505,7 +553,7 @@ const CORES_AVATAR = [['--t-lilas', '--c-lilas'], ['--t-menta', '--c-menta'], ['
 function avatar(texto, chave) {
   let h = 0; for (const ch of String(chave || texto)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   const [f, c] = CORES_AVATAR[h % CORES_AVATAR.length];
-  const iniciais = String(texto).replace(/^(Pix para|Recebido de|Compra no débito -|Pagamento efetuado -)\s*/i, '').trim().split(/\s+/).filter(p => /[\p{L}\d]/u.test(p)).slice(0, 2).map(p => (p.match(/[\p{L}\d]/u) || [''])[0]).join('').toUpperCase();
+  const iniciais = String(texto).replace(/^(Pix para|Recebido de|Compra no débito -|Pagamento efetuado -)\s*/i, '').trim().split(/\s+/).filter(p => /\p{L}/u.test(p)).slice(0, 2).map(p => (p.match(/[\p{L}\d]/u) || [''])[0]).join('').toUpperCase();
   return `<span class="avatar" style="background:var(${f});color:var(${c})">${esc(iniciais || '•')}</span>`;
 }
 const linhaTransacao = l => `<li class="linha">${avatar(l.descricao, l.categoria)}<div class="corpo"><b>${esc(l.descricao)}</b><small>${fmtData(l.vencimento)} · ${esc(l.categoria || 'Sem categoria')}</small></div>
@@ -581,6 +629,20 @@ const botaoNovo = (tabela, rotulo, padrao = '') => `<button class="btn azul" dat
 
 function linhaLancamento(l) {
   const vencido = !l.pago && l.vencimento < hoje();
+  if (A_CLASSIFICAR.includes(l.categoria)) {
+    const nome = nomeDoLancamento(l.descricao);
+    const outros = dados.lancamentos.filter(x => x.id !== l.id && A_CLASSIFICAR.includes(x.categoria) && x.tipo === l.tipo && x.escopo === l.escopo && nomeDoLancamento(x.descricao) === nome).length;
+    return `<li class="linha linha-classificar">
+      ${avatar(l.descricao, l.descricao)}
+      <div class="corpo"><b class="clicavel" data-acao="editar" data-tabela="lancamentos" data-id="${l.id}" role="button" tabindex="0">${esc(l.descricao)}</b>
+        <small>${fmtData(l.vencimento)} · ${ESCOPOS[l.escopo]} · ${l.tipo === 'entrada' ? 'entrou' : 'saiu'}</small>
+        <div class="classificar">
+          <select data-classificar="${l.id}" aria-label="Categoria de ${esc(l.descricao)}">${opcoesCategoria(l.escopo, l.tipo, l.categoria)}</select>
+          ${nome ? `<label><input type="checkbox" data-sempre="${l.id}"> Sempre para ${esc(nome.split(' ').filter(p => !/^(de|da|do|dos|das|e)$/i.test(p)).slice(0, 2).join(' '))}${outros ? ` (e mais ${outros} aqui)` : ''}</label>` : ''}
+        </div></div>
+      <span class="valor ${l.tipo === 'entrada' ? 'positivo' : ''}">${l.tipo === 'entrada' ? '+' : '−'} ${moeda(l.valor)}</span>
+    </li>`;
+  }
   const info = [fmtData(l.vencimento), l.categoria, nomeCliente(l.cliente_id), ESCOPOS[l.escopo]].filter(Boolean).join(' · ');
   return `<li class="linha">
     <input type="checkbox" data-acao="pagar" data-id="${l.id}" ${l.pago ? 'checked' : ''} aria-label="Marcar como pago: ${esc(l.descricao)}">
@@ -792,7 +854,7 @@ const TELA = {
   /* ---------- Lançamentos: todos os dados ---------- */
   lancamentos() {
     const m = mesAtual(), f = ui.filtroLanc;
-    const doMes = dados.lancamentos.filter(l => l.vencimento.slice(0, 7) === m)
+    const doMes = dados.lancamentos.filter(l => f === 'classificar' || l.vencimento.slice(0, 7) === m)
       .filter(l => f === 'todos' || (f === 'classificar' ? A_CLASSIFICAR.includes(l.categoria) : l.escopo === f))
       .sort((a, b) => b.vencimento.localeCompare(a.vencimento));
     const pend = dados.lancamentos.filter(l => A_CLASSIFICAR.includes(l.categoria)).length;
@@ -802,7 +864,9 @@ const TELA = {
     return topo('Lançamentos', 'Tudo o que entrou e saiu, vindo do Nubank todo dia', seletorMes() +
       botaoNovo('lancamentos', 'Novo lançamento', JSON.stringify({ escopo: 'pessoal', vencimento: hoje(), tipo: 'saida' }))) + `
       <div class="pilulas">${pil('todos', 'Tudo')}${pil('empresa', 'Empresa')}${pil('pessoal', 'Pessoal')}${pil('classificar', `A classificar (${pend})`)}</div>
-      <div class="grade duas">
+      ${f === 'classificar' ? `<section class="cartao lista-classificar"><h2>A classificar <small>${pend} de todos os meses</small></h2>
+        <p class="nota" style="margin:0 0 10px">Escolha a categoria e ela salva na hora. Marque "Sempre para..." para classificar os outros da mesma pessoa e os próximos que chegarem.</p>
+        ${lista(doMes, linhaLancamento, 'Tudo classificado.')}</section>` : `<div class="grade duas">
         <section class="cartao"><h2>${esc(nomeMes(m))} <small>+${moedaCurta(entradas)} · −${moedaCurta(saidas)}</small></h2>
           ${lista(doMes, linhaLancamento, 'Nenhum lançamento aqui.')}</section>
         <section class="cartao"><h2>Contas <small><button class="btn pequeno" data-acao="novo" data-tabela="contas" data-padrao='${esc(JSON.stringify({ escopo: 'pessoal' }))}'>Nova conta</button></small></h2>
@@ -812,7 +876,7 @@ const TELA = {
           }).join('')}
           <p class="vazio" style="font-size:12.5px">Contas e faturas do Nubank se atualizam sozinhas todo dia. Caixinhas e ETFs são do retrato de 05/11: atualize clicando nelas.</p>
         </section>
-      </div>`;
+      </div>`}`;
   },
 
   semana() {
@@ -1076,6 +1140,7 @@ document.addEventListener('click', e => {
   if (alvo && alvo.type !== 'checkbox') manipuladores[alvo.dataset.acao]?.(alvo);
 });
 document.addEventListener('change', e => {
+  if (e.target.matches('select[data-classificar]')) { classificar(e.target); return; }
   if (e.target.matches('input[type=checkbox][data-acao]')) manipuladores[e.target.dataset.acao]?.(e.target);
 });
 document.addEventListener('keydown', e => {
@@ -1092,6 +1157,26 @@ document.addEventListener('submit', async e => {
     : await gravar('metas_semana', { titulo, semana: e.target.dataset.semana });
   if (ok && tipo === 'captura') avisar('Anotado na Caixa de entrada.');
 });
+
+async function classificar(sel) {
+  const l = dados.lancamentos.find(x => x.id === sel.dataset.classificar);
+  const categoria = sel.value;
+  if (!l || !categoria || A_CLASSIFICAR.includes(categoria)) return;
+  sel.disabled = true;
+  const sempre = document.querySelector(`[data-sempre="${l.id}"]`)?.checked;
+  const nome = nomeDoLancamento(l.descricao);
+  let ids = [l.id];
+  if (sempre && nome) {
+    const { error } = await banco.from('regras_categoria').upsert({ padrao: nome, tipo: l.tipo, escopo: l.escopo, categoria }, { onConflict: 'padrao,tipo,escopo' });
+    if (error) { avisar('Não consegui guardar a regra: ' + error.message, true); sel.disabled = false; return; }
+    ids = dados.lancamentos.filter(x => A_CLASSIFICAR.includes(x.categoria) && x.tipo === l.tipo && x.escopo === l.escopo && nomeDoLancamento(x.descricao) === nome).map(x => x.id);
+  }
+  const { error } = await banco.from('lancamentos').update({ categoria }).in('id', ids);
+  if (error) { avisar('Não consegui salvar: ' + error.message, true); sel.disabled = false; return; }
+  ids.forEach(id => { const x = dados.lancamentos.find(y => y.id === id); if (x) x.categoria = categoria; });
+  avisar(ids.length > 1 ? `${ids.length} lançamentos em "${categoria}". Os próximos de ${nome} já entram assim.` : sempre ? `Classificado. Os próximos de ${nome} já entram assim.` : 'Classificado.');
+  desenhar();
+}
 
 async function enviarDocumento(form) {
   const arquivo = form.arquivo.files[0];
