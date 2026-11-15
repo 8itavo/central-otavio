@@ -400,3 +400,18 @@ h3.sub small { color: var(--suave); font-weight: 500; font-size: 12px; margin-le
 .classificar label input { width: auto; margin: 0; }
 .lista-classificar .linha-classificar .corpo { min-width: 0; }
 @media (min-width: 761px) { .lista-classificar .classificar select { min-width: 260px; } }
+
+/* Cartões de número clicáveis e detalhe */
+.kpi-clicavel { cursor: pointer; transition: transform .15s, box-shadow .15s, border-color .15s; }
+.kpi-clicavel:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--acento) 35%, var(--borda)); box-shadow: 0 10px 28px rgba(40, 40, 90, .10); }
+.kpi-clicavel:focus-visible { outline: 3px solid color-mix(in srgb, var(--acento) 40%, transparent); outline-offset: 2px; }
+.seta-kpi { font-style: normal; margin-left: 6px; color: var(--acento); font-weight: 700; opacity: .7; }
+.kpi-clicavel:hover .seta-kpi { opacity: 1; }
+dialog:has(.detalhe) { width: min(620px, calc(100vw - 24px)); }
+.detalhe { padding: 22px 24px 24px; display: grid; gap: 10px; }
+.topo-detalhe { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; position: sticky; top: -22px; background: var(--superficie-solida); padding: 22px 0 8px; margin-top: -22px; z-index: 1; }
+.topo-detalhe small { color: var(--suave); font-size: 13px; }
+.total-detalhe { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 16px; border-radius: 14px; background: var(--superficie-2); }
+.total-detalhe span { color: var(--suave); font-size: 13px; font-weight: 600; }
+.total-detalhe b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.detalhe .metrica:first-of-type { padding-top: 10px; }

@@ -424,7 +424,7 @@ function linhaTarefa(t, diaEstrela = hoje()) {
 
 const lista = (itens, render, vazio = '') => itens.length ? `<ul class="lista">${itens.map(render).join('')}</ul>` : `<p class="vazio">${esc(vazio)}</p>`;
 const svgIcone = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONES[k] || ICONES.geral}</svg>`;
-const kpi = (rotulo, valor, nota = '', classe = '', icone = '') => `<div class="kpi ${classe}">${icone ? `<div class="icone">${svgIcone(icone)}</div>` : ''}<span>${esc(rotulo)}</span><strong>${esc(valor)}</strong><small>${typeof nota === 'object' ? nota.html : esc(nota)}</small></div>`;
+const kpi = (rotulo, valor, nota = '', classe = '', icone = '', det = '') => `<div class="kpi ${classe} ${det ? 'kpi-clicavel' : ''}" ${det ? `data-acao="detalhe" data-valor="${esc(det)}" role="button" tabindex="0" title="Ver detalhes"` : ''}>${icone ? `<div class="icone">${svgIcone(icone)}</div>` : ''}<span>${esc(rotulo)}${det ? '<i class="seta-kpi" aria-hidden="true">›</i>' : ''}</span><strong>${esc(valor)}</strong><small>${typeof nota === 'object' ? nota.html : esc(nota)}</small></div>`;
 
 /* ---------- Gráficos (SVG e HTML puros, sem biblioteca) ---------- */
 const CORES = ['var(--g1)', 'var(--g2)', 'var(--g3)', 'var(--g4)', 'var(--g5)', 'var(--g6)'];
@@ -594,10 +594,12 @@ function numeros(m, ateDia = null) {
   const gastosItens = [...L.filter(l => l.escopo === 'pessoal' && l.tipo === 'saida'), ...pessoalPJItens];
   const custo = somaV(custosItens), reembolsoV = somaV(reembolsos);
   const gastos = somaV(gastosItens) - reembolsoV;
-  const outras = somaV(L.filter(l => l.escopo === 'pessoal' && l.tipo === 'entrada' && !ehRetirada(l) && !ehClienteNoPessoal(l) && !ehReembolso(l) && !ehEmprestimoDevolvido(l)));
-  const retirada = somaV(L.filter(l => l.escopo === 'pessoal' && l.tipo === 'entrada' && ehRetirada(l)));
+  const outrasItens = L.filter(l => l.escopo === 'pessoal' && l.tipo === 'entrada' && !ehRetirada(l) && !ehClienteNoPessoal(l) && !ehReembolso(l) && !ehEmprestimoDevolvido(l));
+  const retiradaItens = L.filter(l => l.escopo === 'pessoal' && l.tipo === 'entrada' && ehRetirada(l));
+  const receitaItens = L.filter(l => (l.escopo === 'empresa' && l.tipo === 'entrada') || ehClienteNoPessoal(l));
+  const outras = somaV(outrasItens), retirada = somaV(retiradaItens);
   return { L, receita, custo, lucro: receita - custo, outras, retirada, pessoalPJ: somaV(pessoalPJItens), gastos, reembolsos, reembolsoV,
-    resultado: receita - custo + outras - gastos, custosItens, gastosItens };
+    resultado: receita - custo + outras - gastos, custosItens, gastosItens, outrasItens, retiradaItens, receitaItens, pessoalPJItens };
 }
 
 function patrimonio() {
@@ -686,10 +688,10 @@ const TELA = {
     return `<div class="topo"><div><h1>${saudacao}, <em>Otávio</em></h1><p>${esc(dataLonga)} · veja como estão a agência e a sua vida</p></div><div class="acoes">${seletorMes()}${botaoTemaCelular()}</div></div>
       <form class="captura" data-form="captura"><input name="titulo" placeholder="O que surgiu? Anote aqui e vai para a Caixa de entrada" aria-label="Anotar"><button class="btn azul">Anotar</button></form>
       <div class="grade kpis">
-        ${kpi('Resultado do mês', (n.resultado < 0 ? '− ' : '+ ') + moeda(Math.abs(n.resultado)), { html: delta(n.resultado, a.resultado, false, cmp.r, true) }, '', 'carteira')}
-        ${kpi('Receita da agência', moeda(n.receita), { html: delta(n.receita, a.receita, false, cmp.r) }, '', 'agencia')}
-        ${kpi('Gastos pessoais', moeda(n.gastos), { html: delta(n.gastos, a.gastos, true, cmp.r) }, '', 'pessoal')}
-        ${kpi('Patrimônio', moedaCurta(pat.total), 'Contas, caixinhas e ETFs', '', 'subir')}
+        ${kpi('Resultado do mês', (n.resultado < 0 ? '− ' : '+ ') + moeda(Math.abs(n.resultado)), { html: delta(n.resultado, a.resultado, false, cmp.r, true) }, '', 'carteira', 'resultado')}
+        ${kpi('Receita da agência', moeda(n.receita), { html: delta(n.receita, a.receita, false, cmp.r) }, '', 'agencia', 'receita')}
+        ${kpi('Gastos pessoais', moeda(n.gastos), { html: delta(n.gastos, a.gastos, true, cmp.r) }, '', 'pessoal', 'gastos')}
+        ${kpi('Patrimônio', moedaCurta(pat.total), 'Contas, caixinhas e ETFs', '', 'subir', 'patrimonio')}
       </div>
       <div class="grade painel bloco-espaco">
         <section class="cartao"><h2>Resultado mês a mês <small><button class="btn pequeno" data-acao="ir" data-valor="historico">Ver histórico</button></small></h2>
@@ -759,8 +761,8 @@ const TELA = {
       <div class="grade kpis">
         ${kpi(`${COL.titulo} no período`, sinal(total), `${linhas.length} mês(es)${linhas.some(l => l.m === atual) ? ', com o mês atual' : ''}`, 'destaque', 'carteira')}
         ${kpi('Média por mês', sinal(media), fechados.length ? 'Só meses fechados' : 'Mês em andamento', '', 'historico')}
-        ${kpi('Melhor mês', melhor ? nomeM(melhor.m) : '—', melhor ? sinal(melhor.valor) : '', '', 'subir')}
-        ${kpi('Pior mês', pior ? nomeM(pior.m) : '—', pior ? sinal(pior.valor) : '', '', 'descer')}
+        ${kpi('Melhor mês', melhor ? nomeM(melhor.m) : '—', melhor ? sinal(melhor.valor) : '', '', 'subir', melhor ? 'mes:' + melhor.m : '')}
+        ${kpi('Pior mês', pior ? nomeM(pior.m) : '—', pior ? sinal(pior.valor) : '', '', 'descer', pior ? 'mes:' + pior.m : '')}
       </div>
       <div class="grade duas bloco-espaco">
         <section class="cartao"><h2>${COL.titulo} mês a mês</h2>${area(linhas.map(l => ({ rotulo: rotuloMes(l.m), valor: l.valor })))}</section>
@@ -790,10 +792,10 @@ const TELA = {
     const recebidoDoContratado = contratada ? n.receita / contratada : 0;
     return topo('Agência Impulsionar Pro', `Números de ${nomeMes(m)}`, seletorMes()) + `
       <div class="grade kpis">
-        ${kpi('Receita do mês', moeda(n.receita), { html: delta(n.receita, a.receita, false, cmp.r) }, '', 'carteira')}
-        ${kpi('Lucro', moeda(n.lucro), { html: delta(n.lucro, a.lucro, false, cmp.r) }, '', 'subir')}
-        ${kpi('Custos do mês', moeda(n.custo), { html: delta(n.custo, a.custo, true, cmp.r) }, '', 'descer')}
-        ${kpi('Receita contratada', moeda(contratada), `${abertos.length} cliente(s) ativo(s) por mês`, '', 'clientes')}
+        ${kpi('Receita do mês', moeda(n.receita), { html: delta(n.receita, a.receita, false, cmp.r) }, '', 'carteira', 'receita')}
+        ${kpi('Lucro', moeda(n.lucro), { html: delta(n.lucro, a.lucro, false, cmp.r) }, '', 'subir', 'lucro')}
+        ${kpi('Custos do mês', moeda(n.custo), { html: delta(n.custo, a.custo, true, cmp.r) }, '', 'descer', 'custos')}
+        ${kpi('Receita contratada', moeda(contratada), `${abertos.length} cliente(s) ativo(s) por mês`, '', 'clientes', 'ir:clientes')}
       </div>
       <div class="grade painel bloco-espaco">
         <section class="cartao"><h2>Receita x custos <small>últimos 6 meses</small></h2>${barrasDuplas(serie)}${legendaDupla('Receita', 'Custos')}</section>
@@ -828,10 +830,10 @@ const TELA = {
     const mesesReserva = reserva / mediaGastos;
     return topo('Pessoal', `Sua vida financeira em ${nomeMes(m)}`, seletorMes()) + `
       <div class="grade kpis">
-        ${kpi('Entrou no mês', moeda(entrou), { html: delta(entrou, entrouAnt, false, cmp.r) }, '', 'subir')}
-        ${kpi('Gastou no mês', moeda(n.gastos), { html: delta(n.gastos, a.gastos, true, cmp.r) }, '', 'descer')}
-        ${kpi('Sobrou', (resultado < 0 ? '− ' : '+ ') + moeda(Math.abs(resultado)), resultado >= 0 ? 'Fechou no azul' : 'Gastou mais do que entrou', '', 'feito')}
-        ${kpi('Patrimônio pessoal', moedaCurta(pat.pessoal), 'Conta, caixinhas e ETFs, menos a fatura', '', 'carteira')}
+        ${kpi('Entrou no mês', moeda(entrou), { html: delta(entrou, entrouAnt, false, cmp.r) }, '', 'subir', 'entrou')}
+        ${kpi('Gastou no mês', moeda(n.gastos), { html: delta(n.gastos, a.gastos, true, cmp.r) }, '', 'descer', 'gastos')}
+        ${kpi('Sobrou', (resultado < 0 ? '− ' : '+ ') + moeda(Math.abs(resultado)), resultado >= 0 ? 'Fechou no azul' : 'Gastou mais do que entrou', '', 'feito', 'sobrou')}
+        ${kpi('Patrimônio pessoal', moedaCurta(pat.pessoal), 'Conta, caixinhas e ETFs, menos a fatura', '', 'carteira', 'patrimonio-pessoal')}
       </div>
       <div class="grade painel bloco-espaco">
         <section class="cartao"><h2>Para onde foi o dinheiro <small>${moedaCurta(n.gastos)} em ${esc(nomeMes(m))}</small></h2>
@@ -957,7 +959,7 @@ const TELA = {
       <div class="grade kpis">
         ${kpi('Receita contratada', moeda(receita), `${contratos.length} contratos por mês`, 'destaque', 'carteira')}
         ${kpi('Recebido em ' + rotuloMes(m), moeda(recebido), `${pagos} de ${contratos.length} contratos já pagaram`, '', 'feito')}
-        ${kpi('Contratos terminando', String(terminando.length), terminando[0] ? `${terminando[0].nome} em ${fmtData(terminando[0].fim)}` : 'Nada nos próximos 60 dias', '', 'alerta')}
+        ${kpi('Contratos terminando', String(terminando.length), terminando[0] ? `${terminando[0].nome} em ${fmtData(terminando[0].fim)}` : 'Nada nos próximos 60 dias', '', 'alerta', terminando[0] ? 'cliente:' + terminando[0].id : '')}
         ${kpi('Maior cliente', maior ? Math.round(maior.valor / (receita || 1) * 100) + '%' : '—', maior ? maior.nome + ' da receita' : '', '', 'subir')}
       </div>
       <section class="cartao bloco-espaco"><h2>Recebido de clientes <small>${moedaCurta(total6)} em 6 meses · ${moedaCurta(pessoal6)} caiu no Pix pessoal</small></h2>
@@ -1039,7 +1041,7 @@ const TELA = {
     const semProximo = abertos.filter(l => !l.proximo_followup).length;
     return topo('Prospecção', 'Todo lead em aberto precisa de um próximo passo', botaoNovo('leads', 'Novo lead')) + `
       <div class="grade kpis">
-        ${kpi('Leads em aberto', String(abertos.length), `${semProximo} sem próximo passo`, 'destaque')}
+        ${kpi('Leads em aberto', String(abertos.length), `${semProximo} sem próximo passo`, 'destaque', '', '')}
         ${kpi('Valor mensal potencial', moeda(potencial), 'Soma dos leads em aberto')}
         ${kpi('Follow-ups', String(vencidos), 'Para hoje ou atrasados')}
         ${kpi('Taxa de fechamento', encerrados ? Math.round(ganhos / encerrados * 100) + '%' : '—', `${ganhos} ganho(s) de ${encerrados} encerrado(s)`)}
@@ -1080,7 +1082,7 @@ function desenhar() {
 
 /* ---------- Ações ---------- */
 Object.assign(manipuladores, {
-  ir: b => { ui.tela = b.dataset.valor; if (b.dataset.filtro) ui.filtroLanc = b.dataset.filtro; desenhar(); window.scrollTo(0, 0); },
+  ir: b => { if ($('dialogo').open) $('dialogo').close(); ui.tela = b.dataset.valor; if (b.dataset.filtro) ui.filtroLanc = b.dataset.filtro; desenhar(); window.scrollTo(0, 0); },
   'filtro-lanc': b => { ui.filtroLanc = b.dataset.valor; desenhar(); },
   sair: () => banco.auth.signOut(),
   tema: () => {
@@ -1105,13 +1107,14 @@ Object.assign(manipuladores, {
   escopo: b => { ui.escopo = b.dataset.valor; desenhar(); },
   visao: b => { ui.visao = b.dataset.valor; desenhar(); },
   periodo: b => { ui.periodo = b.dataset.valor; desenhar(); },
-  'abrir-mes': b => { ui.mes = b.dataset.valor; ui.tela = ui.visao === 'tudo' ? 'geral' : ui.visao; desenhar(); window.scrollTo(0, 0); },
+  'abrir-mes': b => { if ($('dialogo').open) $('dialogo').close(); ui.mes = b.dataset.valor; ui.tela = ui.visao === 'tudo' ? 'geral' : ui.visao; desenhar(); window.scrollTo(0, 0); },
+  detalhe: b => abrirDetalhe(b.dataset.valor),
   'status-cliente': b => { ui.statusCliente = b.dataset.valor; desenhar(); },
   mes: b => { ui.mes = somarMes(ui.mes || hoje().slice(0, 7), Number(b.dataset.valor)); desenhar(); },
   semana: b => { ui.deslocamentoSemana = Number(b.dataset.valor) === 0 ? 0 : ui.deslocamentoSemana + Number(b.dataset.valor); desenhar(); },
   meta: b => gravar('metas_semana', { concluida: b.checked }, b.dataset.id),
   'apagar-meta': b => apagar('metas_semana', b.dataset.id),
-  'abrir-cliente': b => { ui.clienteId = b.dataset.id; ui.tela = 'cliente'; desenhar(); window.scrollTo(0, 0); },
+  'abrir-cliente': b => { if ($('dialogo').open) $('dialogo').close(); ui.clienteId = b.dataset.id; ui.tela = 'cliente'; desenhar(); window.scrollTo(0, 0); },
   'abrir-doc': async b => {
     const d = dados.documentos.find(x => x.id === b.dataset.id);
     const janela = window.open('', '_blank');
@@ -1159,6 +1162,58 @@ document.addEventListener('submit', async e => {
     : await gravar('metas_semana', { titulo, semana: e.target.dataset.semana });
   if (ok && tipo === 'captura') avisar('Anotado na Caixa de entrada.');
 });
+
+/* ---------- Detalhe dos cartões de número ---------- */
+function abrirDetalhe(tipo) {
+  if (tipo.startsWith('ir:')) { manipuladores.ir({ dataset: { valor: tipo.slice(3) } }); return; }
+  if (tipo.startsWith('mes:')) { manipuladores['abrir-mes']({ dataset: { valor: tipo.slice(4) } }); return; }
+  if (tipo.startsWith('cliente:')) { manipuladores['abrir-cliente']({ dataset: { id: tipo.slice(8) } }); return; }
+  const m = mesAtual(), n = numeros(m), pat = patrimonio();
+  const ord = itens => itens.slice().sort((a, b) => b.valor - a.valor);
+  const listaL = (itens, vazio = 'Nada neste mês.') => lista(ord(itens), l => `<li class="linha clicavel" data-acao="editar" data-tabela="lancamentos" data-id="${l.id}" role="button" tabindex="0">${avatar(l.descricao, l.descricao)}<div class="corpo"><b>${esc(l.descricao)}</b><small>${fmtData(l.vencimento)} · ${esc(l.categoria || 'Sem categoria')}${l.escopo === 'pessoal' && l.tipo === 'entrada' && /^Cliente/.test(l.categoria || '') ? ' · caiu na conta pessoal' : ''}</small></div>
+    <span class="valor ${l.tipo === 'entrada' ? 'positivo' : ''}">${l.tipo === 'entrada' ? '+' : '−'} ${moeda(l.valor)}</span></li>`, vazio);
+  const passo = (rot, valor, sinal, det) => `<li class="linha ${det ? 'clicavel' : ''}" ${det ? `data-acao="detalhe" data-valor="${det}" role="button" tabindex="0"` : ''}><div class="corpo"><b>${esc(rot)}</b>${det ? '<small>Ver detalhes ›</small>' : ''}</div><span class="valor ${sinal === '+' ? 'positivo' : ''}">${sinal} ${moeda(valor)}</span></li>`;
+  const total = (rot, v) => `<div class="total-detalhe"><span>${esc(rot)}</span><b class="${v < 0 ? 'negativo' : 'positivo'}">${v < 0 ? '− ' : '+ '}${moeda(Math.abs(v))}</b></div>`;
+  const porCat = (itens, menos = []) => {
+    const t = {}; itens.forEach(l => { const k = l.categoria || 'Sem categoria'; t[k] = (t[k] || 0) + Number(l.valor); });
+    menos.forEach(l => { if (t[l.categoria] !== undefined) t[l.categoria] -= Number(l.valor); });
+    const f = Object.entries(t).filter(([, v]) => v > 0.005).sort((x, y) => y[1] - x[1]).map(([rotulo, valor]) => ({ rotulo, valor })); const max = Math.max(1, ...f.map(x => x.valor)); return f.map(x => metrica(x.rotulo, moeda(x.valor), x.valor / max, 'saida')).join(''); };
+  const entrou = n.retirada + n.pessoalPJ + n.outras;
+  const contasHTML = escopo => {
+    const cs = dados.contas.filter(c => c.ativa && (!escopo || c.escopo === escopo)).sort((a, b) => b.saldo - a.saldo);
+    return [['conta', 'Contas'], ['investimento', 'Caixinhas e investimentos'], ['cartao', 'Faturas dos cartões']].map(([t, r]) => {
+      const x = cs.filter(c => tipoConta(c) === t);
+      return x.length ? `<h3 class="sub">${r}</h3>${lista(x, c => `<li class="linha"><div class="corpo"><b>${esc(c.nome)}</b><small>${ESCOPOS[c.escopo]}</small></div><span class="valor ${c.saldo < 0 ? 'negativo' : ''}">${moeda(c.saldo)}</span></li>`)}` : '';
+    }).join('');
+  };
+  const D = {
+    resultado: ['Resultado do mês', `${total('Resultado', n.resultado)}<ul class="lista">
+      ${passo('Receita da agência', n.receita, '+', 'receita')}${passo('Custos da agência', n.custo, '−', 'custos')}
+      ${passo('Outras entradas (aluguel, família...)', n.outras, '+', 'outras')}${passo('Seus gastos pessoais', n.gastos, '−', 'gastos')}</ul>
+      <p class="nota">Retiradas do PJ para o pessoal não entram aqui: é o mesmo dinheiro mudando de conta.</p>`],
+    receita: ['Receita da agência', `${total('Recebido no mês', n.receita)}${listaL(n.receitaItens, 'Nada recebido neste mês.')}
+      <p><button class="btn pequeno" data-acao="ir" data-valor="clientes">Abrir Clientes</button></p>`],
+    custos: ['Custos da agência', `${total('Custos no mês', -n.custo)}<h3 class="sub">Por categoria</h3>${porCat(n.custosItens)}<h3 class="sub">Cada lançamento</h3>${listaL(n.custosItens, 'Sem custos neste mês.')}`],
+    lucro: ['Lucro da agência', `${total('Lucro', n.lucro)}<ul class="lista">${passo('Receita', n.receita, '+', 'receita')}${passo('Custos', n.custo, '−', 'custos')}</ul>`],
+    gastos: ['Gastos pessoais', `${total('Gastos no mês', -n.gastos)}<h3 class="sub">Por categoria</h3>${porCat(n.gastosItens, n.reembolsos)}
+      ${n.reembolsos.length ? `<h3 class="sub">Devoluções que descontaram (${moeda(n.reembolsoV)})</h3>${listaL(n.reembolsos)}` : ''}
+      <h3 class="sub">Cada gasto</h3>${listaL(n.gastosItens, 'Sem gastos neste mês.')}`],
+    outras: ['Outras entradas', `${total('Outras entradas', n.outras)}${listaL(n.outrasItens)}`],
+    entrou: ['Entrou no pessoal', `${total('Entrou no mês', entrou)}
+      <h3 class="sub">Retiradas da empresa (${moeda(n.retirada)})</h3>${listaL(n.retiradaItens, 'Nenhuma retirada.')}
+      ${n.pessoalPJItens.length ? `<h3 class="sub">Contas pessoais pagas pelo PJ (${moeda(n.pessoalPJ)})</h3>${listaL(n.pessoalPJItens)}` : ''}
+      <h3 class="sub">Outras entradas (${moeda(n.outras)})</h3>${listaL(n.outrasItens, 'Nenhuma.')}`],
+    sobrou: ['Quanto sobrou', `${total('Sobrou', entrou - n.gastos)}<ul class="lista">${passo('Entrou', entrou, '+', 'entrou')}${passo('Gastou', n.gastos, '−', 'gastos')}</ul>`],
+    patrimonio: ['Patrimônio', `${total('Total', pat.total)}${contasHTML()}`],
+    'patrimonio-pessoal': ['Patrimônio pessoal', `${total('Total pessoal', pat.pessoal)}${contasHTML('pessoal')}`]
+  }[tipo];
+  if (!D) return;
+  const d = $('dialogo');
+  d.innerHTML = `<div class="detalhe"><div class="topo-detalhe"><div><h2>${esc(D[0])}</h2><small>${esc(nomeMes(m))}</small></div><button class="btn pequeno" data-fechar>Fechar</button></div>${D[1]}</div>`;
+  d.querySelector('[data-fechar]').onclick = () => d.close();
+  if (!d.open) d.showModal();
+  d.scrollTop = 0;
+}
 
 async function classificar(sel) {
   const l = dados.lancamentos.find(x => x.id === sel.dataset.classificar);
